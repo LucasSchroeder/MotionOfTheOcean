@@ -148,8 +148,7 @@ class RLWorld(object):
         agent_type = json_data[AGENT_TYPE_KEY]
 
         if (agent_type == PPOAgent.NAME):
-          # agent = PPOAgent(self, id, json_data)
-          agent = CustomAgent(self, id, json_data)
+          agent = PPOAgent(self, id, json_data)
         else:
           assert False, 'Unsupported agent type: ' + agent_type
       assert (agent != None), 'Failed to build agent {:d} from: {}'.format(id, agent_file)
