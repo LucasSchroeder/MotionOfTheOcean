@@ -149,11 +149,8 @@ class RLWorld(object):
     return
 
   def _reset_agents(self):
-    print("reset agents")
     for agent in self.agents:
-      
       if (agent != None):
-        print("in agent")
         agent.reset()
     return
 
@@ -211,16 +208,16 @@ class custom_actor(tf.keras.Model):
     return a
 
 class CustomAgent(RLAgent):
-    def __init__(self, world, id, json_data, gamma = 0.99):
+    def __init__(self, world, id, json_data, gamma = 0.95):
         
         super().__init__(world, id, json_data)
         self.world = world
         self.id = id
         self.gamma = gamma
-        # self.a_opt = tf.keras.optimizers.Adam(learning_rate=1e-5)
-        # self.c_opt = tf.keras.optimizers.Adam(learning_rate=1e-5)
-        self.a_opt = tf.keras.optimizers.Adam(learning_rate=7e-3)
-        self.c_opt = tf.keras.optimizers.Adam(learning_rate=7e-3)
+        self.discount_factor = 0.95
+
+        self.a_opt = tf.keras.optimizers.Adam(learning_rate=0.00001)
+        self.c_opt = tf.keras.optimizers.Adam(learning_rate=0.01)
         self.actor = custom_actor()
         self.critic = custom_critic()
         self.clip_pram = 0.2
@@ -278,8 +275,9 @@ class CustomAgent(RLAgent):
         sr1 = tf.stack(sur1)
         sr2 = tf.stack(sur2)
         
-        #closs = tf.reduce_mean(tf.math.square(td))
         loss = tf.math.negative(tf.reduce_mean(tf.math.minimum(sr1, sr2)) - closs + 0.001 * entropy)
+        # loss = tf.reduce_mean(tf.math.minimum(sr1, sr2)) - closs + 0.001 * entropy
+
         #print(loss)
         return loss
 
@@ -305,8 +303,8 @@ class CustomAgent(RLAgent):
         return a_loss, c_loss
 
 def test_reward(env):
-  print("currently in test_reward()")
-  steps = 0
+  steps_update_world = 0
+  total_reward = 0
   world.end_episode()
   world.reset()
   total_reward_count = 0
@@ -315,23 +313,23 @@ def test_reward(env):
   done = False
   while not done:
     action = agentoo7.act(state)
+    # print("ACTION (IN TEST_REWARD): ", action)
     # take a step with the environment 
     agentoo7._apply_action(action)
     next_state, reward, done = update_world(world)
 
     state = next_state
     total_reward_count += reward
-
+    done = world.env.is_episode_end()
   return total_reward_count
 
 
-def preprocess1(states, actions, rewards, done, values, gamma):
+def process_history(states, actions, rewards, done, values, discount_factor, gamma):
     g = 0
-    lmbda = 0.95
     returns = []
     for i in reversed(range(len(rewards))):
        delta = rewards[i] + gamma * values[i + 1] * done[i] - values[i]
-       g = delta + gamma * lmbda * dones[i] * g
+       g = delta + gamma * discount_factor * dones[i] * g
        returns.append(g + values[i])
 
     returns.reverse()
@@ -342,10 +340,8 @@ def preprocess1(states, actions, rewards, done, values, gamma):
     returns = np.array(returns, dtype=np.float32)
     return states, actions, returns, adv    
 
-animating = True
-step = False
 total_reward = 0
-steps = 0
+steps_update_world = 0
 
 def update_world(world):
   next_state, reward, is_done = world.update(update_timestep)
@@ -353,16 +349,14 @@ def update_world(world):
   # reward = world.env.calc_reward(agent_id=0)
   global total_reward
   total_reward += reward
-  global steps
-  steps+=1
+  global steps_update_world
+  steps_update_world+=1
   
-  #print("reward=",reward)
-  #print("steps=",steps)
   end_episode = world.env.is_episode_end()
-  if (end_episode or steps>= 1000):
+  if (end_episode or steps_update_world>= 1000):
     print("total_reward adfkjdkfsdf =",total_reward)
     total_reward=0
-    steps = 0
+    steps_update_world = 0
     world.end_episode()
     world.reset()
   return next_state, reward, is_done
@@ -424,7 +418,8 @@ env = world.env
 
 tf.random.set_seed(336699)
 agentoo7 = world.agents[0]
-steps = 5000
+steps_loop = 4096
+mini_batches = 256
 ep_reward = []
 total_avgr = []
 target = False 
@@ -433,12 +428,11 @@ avg_rewards_list = []
 update_timestep = 1. / 240.
 
 
-for s in range(steps):
+for s in range(steps_loop):
   if target == True:
           break
   
   done = False
-  ############################### NEED TO GET INITIAL #######################
   state = env._humanoid.getState() #env.reset()
   all_aloss = []
   all_closs = []
@@ -450,8 +444,8 @@ for s in range(steps):
   values = []
   print("new episod")
 
-  for e in range(128):
-    world.reset()
+  for e in range(mini_batches):
+    # world.reset()
     # print("STATE: ", state)
     action = agentoo7.act(state)
     # print("action was: ", action)
@@ -469,7 +463,7 @@ for s in range(steps):
     actions.append(action)
 
 
-    ########################### THIS LINE THA CALLS PROB IS WRONG ###########
+    ########################### THIS LINE THAT CALLS PROB IS WRONG ###########
     prob = agentoo7.actor(np.array([state]))
     probs.append(prob[0])
     values.append(value[0][0])
@@ -480,23 +474,27 @@ for s in range(steps):
   np.reshape(probs, (len(probs),agentoo7.num_actions))
   probs = np.stack(probs, axis=0)
 
-  states, actions,returns, adv  = preprocess1(states, actions, rewards, dones, values, 1)
+  states, actions,returns, adv  = process_history(states, actions, rewards, dones, values, agentoo7.discount_factor, agentoo7.gamma)
 
-  for epocs in range(10):
+  for epocs in range(1):
       al,cl = agentoo7.learn(states, actions, adv, probs, returns)
       # print(f"al{al}") 
       # print(f"cl{cl}")   
 
   avg_reward = np.mean([test_reward(env) for _ in range(5)])
-  print(f"total test reward is {avg_reward}")
+  print(f"TEST REWARD is {avg_reward}")
   avg_rewards_list.append(avg_reward)
   if avg_reward > best_reward:
-        print('best reward=' + str(avg_reward))
-        agentoo7.actor.save('model_actor_{}_{}'.format(s, avg_reward), save_format="tf")
-        agentoo7.critic.save('model_critic_{}_{}'.format(s, avg_reward), save_format="tf")
+        print('Saving Model -- reward improved to: ' + str(avg_reward))
+        agentoo7.actor.save('model_actor_{}_{}'.format(s, avg_reward), save_format='tf')
+        agentoo7.critic.save('model_critic_{}_{}'.format(s, avg_reward), save_format='tf')
         best_reward = avg_reward
   if best_reward == 200:
         target = True
+  # Reset the environment and the humanoid
+  total_reward = 0
+  steps_update_world = 0
+  world.end_episode()
   world.reset()
 
 env.close()
