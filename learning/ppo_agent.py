@@ -16,10 +16,9 @@ from learning.mpi_solver import MPISolver
 import learning.tf_util as TFUtil
 from pybullet_utils.logger import Logger
 import pybullet_utils.mpi_util as MPIUtil
-import pybullet_utils.math_util as MathUtil
 from pybullet_envs.deep_mimic.env.env import Env
 from custom_reward import getRewardCustom
-from pybullet_envs.deep_mimic.learning.tf_agent import RLAgent
+from pybullet_envs.deep_mimic.learning.rl_agent import RLAgent
 '''
 Proximal Policy Optimization Agent
 '''
