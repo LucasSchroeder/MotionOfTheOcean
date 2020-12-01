@@ -280,13 +280,13 @@ class CustomAgent(RLAgent):
       pass
 
     def act(self,state):
-        action = self.actor(np.array([state]))
-        # prob = self.actor(np.array([state]))
-        # prob = prob.numpy()
-        # dist = tfp.distributions.Categorical(probs=prob, dtype=tf.float32)
-        # action = dist.sample()
-        # return int(action.numpy()[0])
-        return action
+        # action = self.actor(np.array([state]))
+        prob = self.actor(np.array([state]))
+        prob = prob.numpy()
+        dist = tfp.distributions.Categorical(probs=prob, dtype=tf.float32)
+        action = dist.sample()
+        return int(action.numpy()[0])
+        # return action
     
     def actor_loss(self, probs, actions, adv, old_probs, closs):
         
