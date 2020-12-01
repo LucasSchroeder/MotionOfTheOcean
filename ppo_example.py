@@ -16,7 +16,6 @@ from pybullet_envs.deep_mimic.env.env import Env
 from custom_reward import getRewardCustom
 from pybullet_envs.deep_mimic.env.action_space import ActionSpace
 from pybullet_envs.deep_mimic.env.pybullet_deep_mimic_env import PyBulletDeepMimicEnv
-from learning.rl_world import RLWorld
 
 from pybullet_utils.arg_parser import ArgParser
 from pybullet_utils.logger import Logger
@@ -63,8 +62,7 @@ class RLWorld(object):
 
   def parse_args(self, arg_parser):
     self.train_agents = self.arg_parser.parse_bools('train_agents')
-    num_agents = self.env.get_num_agents()
-    assert (len(self.train_agents) == num_agents or len(self.train_agents) == 0)
+    assert (len(self.train_agents) == 1 or len(self.train_agents) == 0)
 
     return
 
@@ -73,39 +71,37 @@ class RLWorld(object):
     return
 
   def build_agents(self):
-    num_agents = self.env.get_num_agents()
-    print("num_agents=", num_agents)
     self.agents = []
 
     Logger.print2('')
-    Logger.print2('Num Agents: {:d}'.format(num_agents))
+    Logger.print2('Num Agents: {:d}'.format(1))
 
     agent_files = self.arg_parser.parse_strings('agent_files')
     print("len(agent_files)=", len(agent_files))
-    assert (len(agent_files) == num_agents or len(agent_files) == 0)
+    assert (len(agent_files) == 1 or len(agent_files) == 0)
 
     model_files = self.arg_parser.parse_strings('model_files')
-    assert (len(model_files) == num_agents or len(model_files) == 0)
+    assert (len(model_files) == 1 or len(model_files) == 0)
 
     output_path = self.arg_parser.parse_string('output_path')
     int_output_path = self.arg_parser.parse_string('int_output_path')
 
-    for i in range(num_agents):
-      curr_file = agent_files[i]
-      curr_agent = self._build_agent(i, curr_file)
+    
+    curr_file = agent_files[0]
+    curr_agent = self._build_agent(0, curr_file)
 
-      if curr_agent is not None:
-        curr_agent.output_dir = output_path
-        curr_agent.int_output_dir = int_output_path
-        Logger.print2(str(curr_agent))
+    if curr_agent is not None:
+      curr_agent.output_dir = output_path
+      curr_agent.int_output_dir = int_output_path
+      Logger.print2(str(curr_agent))
 
-        if (len(model_files) > 0):
-          curr_model_file = model_files[i]
-          if curr_model_file != 'none':
-            curr_agent.load_model(os.getcwd() + "/" + curr_model_file)
+      if (len(model_files) > 0):
+        curr_model_file = model_files[0]
+        if curr_model_file != 'none':
+          curr_agent.load_model(os.getcwd() + "/" + curr_model_file)
 
-      self.agents.append(curr_agent)
-      Logger.print2('')
+    self.agents.append(curr_agent)
+    Logger.print2('')
 
     self.set_enable_training(self.enable_training)
 
@@ -153,8 +149,11 @@ class RLWorld(object):
     return
 
   def _reset_agents(self):
+    print("reset agents")
     for agent in self.agents:
+      
       if (agent != None):
+        print("in agent")
         agent.reset()
     return
 
@@ -204,9 +203,9 @@ class custom_actor(tf.keras.Model):
     self.a = tf.keras.layers.Dense(self.num_actions, activation='softmax')
 
   def call(self, input_data):
-    print("input_data",input_data)
+    # print("input_data",input_data)
     layer1 = self.d1(input_data)
-    print("layer1",layer1)
+    # print("layer1",layer1) #### This is becoming all NAN
     layer2 = self.d2(layer1)
     a = self.a(layer2)
     return a
@@ -229,23 +228,6 @@ class CustomAgent(RLAgent):
         self.state_size = 197
         self.num_actions = 36
     
-    def _check_action_space(self):
-      action_space = self.get_action_space()
-      return action_space == ActionSpace.Continuous
-
-    def _decide_action(self,s):
-      # logits = self.custom_model.call(np.reshape(s, [-1, self.state_size]))
-
-      # action_choices = np.arange(self.num_actions)
-      # normed_probs = np.linalg.norm(logits, axis=0)
-      # action_index = np.random.choice(action_choices, 1, p=normed_probs)
-      # custom_action = action_index[0]
-
-      # new_standard_deviation = tf.math.reduce_std(logits)
-        
-      # custom_logp = calc_logp_gaussian(logits,mean_tf=None,std_tf=new_standard_deviation)
-      # return custom_action, custom_logp
-      pass
     
     def _get_int_output_path(self):
       assert (self.int_output_dir != '')
@@ -257,36 +239,18 @@ class CustomAgent(RLAgent):
       assert (self.output_dir != '')
       file_path = self.output_dir + '/agent' + str(self.id) + '_model.ckpt'
       return file_path
-    
-    def _train_step(self):
-      pass
 
     def load_model(self, in_path):
-      # with self.sess.as_default(), self.graph.as_default():
-      #   self.saver.restore(self.sess, in_path)
-      #   self._load_normalizers()
-      #   Logger.print2('Model loaded from: ' + in_path)
-      # return
-      pass
-    
-    def save_model(self, out_path):
-      # with self.sess.as_default(), self.graph.as_default():
-      #   try:
-      #     save_path = self.saver.save(self.sess, out_path, write_meta_graph=False, write_state=False)
-      #     Logger.print2('Model saved to: ' + save_path)
-      #   except:
-      #     Logger.print2("Failed to save model to: " + save_path)
-      # return
       pass
 
     def act(self,state):
-        # action = self.actor(np.array([state]))
-        prob = self.actor(np.array([state]))
-        prob = prob.numpy()
-        dist = tfp.distributions.Categorical(probs=prob, dtype=tf.float32)
-        action = dist.sample()
-        return int(action.numpy()[0])
-        # return action
+        action = self.actor(np.array([state]))
+        # prob = self.actor(np.array([state]))
+        # prob = prob.numpy()
+        # dist = tfp.distributions.Categorical(probs=prob, dtype=tf.float32)
+        # action = dist.sample()
+        # return int(action.numpy()[0])
+        return action.numpy()[0]
     
     def actor_loss(self, probs, actions, adv, old_probs, closs):
         
@@ -325,7 +289,7 @@ class CustomAgent(RLAgent):
 
         old_p = old_probs
 
-        old_p = tf.reshape(old_p, (len(old_p),2))
+        old_p = tf.reshape(old_p, (len(old_p),self.num_actions))
         with tf.GradientTape() as tape1, tf.GradientTape() as tape2:
             p = self.actor(states, training=True)
             v =  self.critic(states,training=True)
@@ -341,16 +305,24 @@ class CustomAgent(RLAgent):
         return a_loss, c_loss
 
 def test_reward(env):
-  total_reward = 0
-  state = env.reset()
+  print("currently in test_reward()")
+  steps = 0
+  world.end_episode()
+  world.reset()
+  total_reward_count = 0
+  # state = env.reset()
+  state = env._humanoid.getState()
   done = False
   while not done:
-    action = np.argmax(agentoo7.actor(np.array([state])).numpy())
-    next_state, reward, done, _ = env.step(action)
-    state = next_state
-    total_reward += reward
+    action = agentoo7.act(state)
+    # take a step with the environment 
+    agentoo7._apply_action(action)
+    next_state, reward, done = update_world(world)
 
-  return total_reward
+    state = next_state
+    total_reward_count += reward
+
+  return total_reward_count
 
 
 def preprocess1(states, actions, rewards, done, values, gamma):
@@ -479,9 +451,11 @@ for s in range(steps):
   print("new episod")
 
   for e in range(128):
-    print("STATE: ", state)
+    world.reset()
+    # print("STATE: ", state)
     action = agentoo7.act(state)
-    print("action was: ", action)
+    # print("action was: ", action)
+    # print("action type: ", type(action))
     value = agentoo7.critic(np.array([state])).numpy()
     # take a step with the environment 
     agentoo7._apply_action(action)
@@ -493,6 +467,9 @@ for s in range(steps):
     states.append(state)
     #actions.append(tf.one_hot(action, 2, dtype=tf.int32).numpy().tolist())
     actions.append(action)
+
+
+    ########################### THIS LINE THA CALLS PROB IS WRONG ###########
     prob = agentoo7.actor(np.array([state]))
     probs.append(prob[0])
     values.append(value[0][0])
@@ -500,7 +477,7 @@ for s in range(steps):
   
   value = agentoo7.critic(np.array([state])).numpy()
   values.append(value[0][0])
-  np.reshape(probs, (len(probs),2))
+  np.reshape(probs, (len(probs),agentoo7.num_actions))
   probs = np.stack(probs, axis=0)
 
   states, actions,returns, adv  = preprocess1(states, actions, rewards, dones, values, 1)
@@ -520,7 +497,7 @@ for s in range(steps):
         best_reward = avg_reward
   if best_reward == 200:
         target = True
-  env.reset()
+  world.reset()
 
 env.close()
     

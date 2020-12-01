@@ -52,9 +52,6 @@ class RLAgent(ABC):
     self.logger = Logger()
     self._mode = self.Mode.TRAIN
 
-    assert self._check_action_space(), \
-        Logger.print2("Invalid action space, got {:s}".format(str(self.get_action_space())))
-
     self._enable_training = True
     self.path = Path()
     self.iter = int(0)
@@ -182,34 +179,6 @@ class RLAgent(ABC):
 
   def get_name(self):
     return self.NAME
-
-  @abstractmethod
-  def save_model(self, out_path):
-    pass
-
-  @abstractmethod
-  def load_model(self, in_path):
-    pass
-
-  @abstractmethod
-  def _decide_action(self, s, g):
-    pass
-
-  @abstractmethod
-  def _get_output_path(self):
-    pass
-
-  @abstractmethod
-  def _get_int_output_path(self):
-    pass
-
-  @abstractmethod
-  def _train_step(self):
-    pass
-
-  @abstractmethod
-  def _check_action_space(self):
-    pass
 
   def get_action_space(self):
     return self.world.env.get_action_space(self.id)
