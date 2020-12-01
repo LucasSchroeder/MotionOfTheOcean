@@ -113,9 +113,20 @@ class RLWorld(object):
 
   def update(self, timestep):
     # print("world update!\n")
-    self._update_agents(timestep)
+    ###################################################
+    # self._update_agents(timestep)
     self._update_env(timestep)
-    return
+
+    # compute next state
+    next_state = self.env._humanoid.getState()
+    
+    # compute reward
+    kinPose = self.env._humanoid.computePose(self.env._humanoid._frameFraction)
+    reward = getRewardCustom(kinPose,self.env._humanoid)
+
+    # compute whether episode is done
+    is_done = self.env.is_episode_end()
+    return next_state, reward, is_done
 
   def reset(self):
     self._reset_agents()
@@ -269,11 +280,13 @@ class CustomAgent(RLAgent):
       pass
 
     def act(self,state):
-        prob = self.actor(np.array([state]))
-        prob = prob.numpy()
-        dist = tfp.distributions.Categorical(probs=prob, dtype=tf.float32)
-        action = dist.sample()
-        return int(action.numpy()[0])
+        action = self.actor(np.array([state]))
+        # prob = self.actor(np.array([state]))
+        # prob = prob.numpy()
+        # dist = tfp.distributions.Categorical(probs=prob, dtype=tf.float32)
+        # action = dist.sample()
+        # return int(action.numpy()[0])
+        return action
     
     def actor_loss(self, probs, actions, adv, old_probs, closs):
         
@@ -357,17 +370,14 @@ def preprocess1(states, actions, rewards, done, values, gamma):
     returns = np.array(returns, dtype=np.float32)
     return states, actions, returns, adv    
 
-update_timestep = 1. / 240.
 animating = True
 step = False
 total_reward = 0
 steps = 0
 
-def update_world(world, time_elapsed):
-  timeStep = update_timestep
-  world.update(timeStep)
-  kinPose = world.env._humanoid.computePose(world.env._humanoid._frameFraction)
-  reward = getRewardCustom(kinPose,world.env._humanoid)
+def update_world(world):
+  next_state, reward, is_done = world.update(update_timestep)
+  
   # reward = world.env.calc_reward(agent_id=0)
   global total_reward
   total_reward += reward
@@ -383,7 +393,7 @@ def update_world(world, time_elapsed):
     steps = 0
     world.end_episode()
     world.reset()
-  return
+  return next_state, reward, is_done
 
 def build_arg_parser(args):
   arg_parser = ArgParser()
@@ -434,9 +444,11 @@ args = sys.argv[1:]
 enable_draw = False
 world = build_world(args, enable_draw)
 
-env= gym.make("CartPole-v0")
-low = env.observation_space.low
-high = env.observation_space.high
+env = world.env
+
+# env= gym.make("CartPole-v0")
+# low = env.observation_space.low
+# high = env.observation_space.high
 
 tf.random.set_seed(336699)
 agentoo7 = world.agents[0]
@@ -446,6 +458,7 @@ total_avgr = []
 target = False 
 best_reward = 0
 avg_rewards_list = []
+update_timestep = 1. / 240.
 
 
 for s in range(steps):
@@ -453,7 +466,8 @@ for s in range(steps):
           break
   
   done = False
-  state = env.reset()
+  ############################### NEED TO GET INITIAL #######################
+  state = env._humanoid.getState() #env.reset()
   all_aloss = []
   all_closs = []
   rewards = []
@@ -465,10 +479,15 @@ for s in range(steps):
   print("new episod")
 
   for e in range(128):
-   
+    print("STATE: ", state)
     action = agentoo7.act(state)
+    print("action was: ", action)
     value = agentoo7.critic(np.array([state])).numpy()
-    next_state, reward, done, _ = env.step(action)
+    # take a step with the environment 
+    agentoo7._apply_action(action)
+    next_state, reward, done = update_world(world)
+
+    # next_state, reward, done, _ = env.step(action)
     dones.append(1-done)
     rewards.append(reward)
     states.append(state)
@@ -478,8 +497,6 @@ for s in range(steps):
     probs.append(prob[0])
     values.append(value[0][0])
     state = next_state
-    if done:
-      env.reset()
   
   value = agentoo7.critic(np.array([state])).numpy()
   values.append(value[0][0])
