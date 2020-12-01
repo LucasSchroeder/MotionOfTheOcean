@@ -486,8 +486,8 @@ for s in range(steps_loop):
   avg_rewards_list.append(avg_reward)
   if avg_reward > best_reward:
         print('Saving Model -- reward improved to: ' + str(avg_reward))
-        agentoo7.actor.save('model_actor_{}_{}'.format(s, avg_reward), save_format='tf')
-        agentoo7.critic.save('model_critic_{}_{}'.format(s, avg_reward), save_format='tf')
+        agentoo7.actor.save('Saved_Models/model_actor_{}_{}'.format(s, avg_reward), save_format='tf')
+        agentoo7.critic.save('Saved_Models/model_critic_{}_{}'.format(s, avg_reward), save_format='tf')
         best_reward = avg_reward
   if best_reward == 200:
         target = True
