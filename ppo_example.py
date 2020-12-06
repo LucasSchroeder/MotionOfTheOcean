@@ -369,7 +369,7 @@ def build_arg_parser(args):
 
   arg_file = arg_parser.parse_string('arg_file', '')
   if arg_file == '':
-    arg_file = "train_humanoid3d_backflip_args.txt"
+    arg_file = "run_humanoid3d_backflip_args.txt"
   if (arg_file != ''):
     path = os.getcwd() + "/args/" + arg_file
     succ = arg_parser.load_file(path)
