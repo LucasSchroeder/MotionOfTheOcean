@@ -415,10 +415,6 @@ if __name__ == '__main__':
 
   env = world.env
 
-  # env= gym.make("CartPole-v0")
-  # low = env.observation_space.low
-  # high = env.observation_space.high
-
   tf.random.set_seed(336699)
   agentoo7 = world.agents[0]
   steps_loop = 4096
