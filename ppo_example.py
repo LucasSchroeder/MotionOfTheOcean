@@ -7,6 +7,7 @@ os.sys.path.insert(0, parentdir)
 
 import numpy as np
 import tensorflow as tf 
+from tensorflow import keras
 import gym
 import tensorflow_probability as tfp
 import tensorflow.keras.losses as kls
@@ -238,7 +239,7 @@ class CustomAgent(RLAgent):
       return file_path
 
     def load_model(self, in_path):
-      pass
+      self.actor = keras.models.load_model('Saved_Models/model_actor_2_63.01912871663599')
 
     def act(self,state):
         action = self.actor(np.array([state]))
