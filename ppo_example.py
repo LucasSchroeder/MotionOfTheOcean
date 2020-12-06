@@ -342,6 +342,7 @@ def process_history(states, actions, rewards, done, values, discount_factor, gam
 
 total_reward = 0
 steps_update_world = 0
+update_timestep = 1. / 240.
 
 def update_world(world):
   next_state, reward, is_done = world.update(update_timestep)
@@ -367,7 +368,7 @@ def build_arg_parser(args):
 
   arg_file = arg_parser.parse_string('arg_file', '')
   if arg_file == '':
-    arg_file = "run_humanoid3d_backflip_args.txt"
+    arg_file = "train_humanoid3d_backflip_args.txt"
   if (arg_file != ''):
     path = os.getcwd() + "/args/" + arg_file
     succ = arg_parser.load_file(path)
@@ -406,97 +407,97 @@ def build_world(args, enable_draw):
     world.reset()
   return world
 
-args = sys.argv[1:]
-enable_draw = False
-world = build_world(args, enable_draw)
+if __name__ == '__main__':
+  args = sys.argv[1:]
+  enable_draw = False
+  world = build_world(args, enable_draw)
 
-env = world.env
+  env = world.env
 
-# env= gym.make("CartPole-v0")
-# low = env.observation_space.low
-# high = env.observation_space.high
+  # env= gym.make("CartPole-v0")
+  # low = env.observation_space.low
+  # high = env.observation_space.high
 
-tf.random.set_seed(336699)
-agentoo7 = world.agents[0]
-steps_loop = 4096
-mini_batches = 256
-ep_reward = []
-total_avgr = []
-target = False 
-best_reward = 0
-avg_rewards_list = []
-update_timestep = 1. / 240.
+  tf.random.set_seed(336699)
+  agentoo7 = world.agents[0]
+  steps_loop = 4096
+  mini_batches = 256
+  ep_reward = []
+  total_avgr = []
+  target = False 
+  best_reward = 0
+  avg_rewards_list = []
 
 
-for s in range(steps_loop):
-  if target == True:
-          break
-  
-  done = False
-  state = env._humanoid.getState() #env.reset()
-  all_aloss = []
-  all_closs = []
-  rewards = []
-  states = []
-  actions = []
-  probs = []
-  dones = []
-  values = []
-  print("new episod")
+  for s in range(steps_loop):
+    if target == True:
+            break
+    
+    done = False
+    state = env._humanoid.getState() #env.reset()
+    all_aloss = []
+    all_closs = []
+    rewards = []
+    states = []
+    actions = []
+    probs = []
+    dones = []
+    values = []
+    print("new episod")
 
-  for e in range(mini_batches):
-    # world.reset()
-    # print("STATE: ", state)
-    action = agentoo7.act(state)
-    # print("action was: ", action)
-    # print("action type: ", type(action))
+    for e in range(mini_batches):
+      # world.reset()
+      # print("STATE: ", state)
+      action = agentoo7.act(state)
+      # print("action was: ", action)
+      # print("action type: ", type(action))
+      value = agentoo7.critic(np.array([state])).numpy()
+      # take a step with the environment 
+      agentoo7._apply_action(action)
+      next_state, reward, done = update_world(world)
+
+      # next_state, reward, done, _ = env.step(action)
+      dones.append(1-done)
+      rewards.append(reward)
+      states.append(state)
+      #actions.append(tf.one_hot(action, 2, dtype=tf.int32).numpy().tolist())
+      actions.append(action)
+
+
+      ########################### THIS LINE THAT CALLS PROB IS WRONG ###########
+      prob = agentoo7.actor(np.array([state]))
+      probs.append(prob[0])
+      values.append(value[0][0])
+      state = next_state
+    
     value = agentoo7.critic(np.array([state])).numpy()
-    # take a step with the environment 
-    agentoo7._apply_action(action)
-    next_state, reward, done = update_world(world)
-
-    # next_state, reward, done, _ = env.step(action)
-    dones.append(1-done)
-    rewards.append(reward)
-    states.append(state)
-    #actions.append(tf.one_hot(action, 2, dtype=tf.int32).numpy().tolist())
-    actions.append(action)
-
-
-    ########################### THIS LINE THAT CALLS PROB IS WRONG ###########
-    prob = agentoo7.actor(np.array([state]))
-    probs.append(prob[0])
     values.append(value[0][0])
-    state = next_state
-  
-  value = agentoo7.critic(np.array([state])).numpy()
-  values.append(value[0][0])
-  np.reshape(probs, (len(probs),agentoo7.num_actions))
-  probs = np.stack(probs, axis=0)
+    np.reshape(probs, (len(probs),agentoo7.num_actions))
+    probs = np.stack(probs, axis=0)
 
-  states, actions,returns, adv  = process_history(states, actions, rewards, dones, values, agentoo7.discount_factor, agentoo7.gamma)
+    states, actions,returns, adv  = process_history(states, actions, rewards, dones, values, agentoo7.discount_factor, agentoo7.gamma)
 
-  for epocs in range(1):
-      al,cl = agentoo7.learn(states, actions, adv, probs, returns)
-      # print(f"al{al}") 
-      # print(f"cl{cl}")   
+    for epocs in range(1):
+        al,cl = agentoo7.learn(states, actions, adv, probs, returns)
+        # print(f"al{al}") 
+        # print(f"cl{cl}")   
 
-  avg_reward = np.mean([test_reward(env) for _ in range(5)])
-  print(f"TEST REWARD is {avg_reward}")
-  avg_rewards_list.append(avg_reward)
-  if avg_reward > best_reward:
-        print('Saving Model -- reward improved to: ' + str(avg_reward))
-        agentoo7.actor.save('Saved_Models/model_actor_{}_{}'.format(s, avg_reward), save_format='tf')
-        agentoo7.critic.save('Saved_Models/model_critic_{}_{}'.format(s, avg_reward), save_format='tf')
-        best_reward = avg_reward
-  if best_reward == 200:
-        target = True
-  # Reset the environment and the humanoid
-  total_reward = 0
-  steps_update_world = 0
-  world.end_episode()
-  world.reset()
+    avg_reward = np.mean([test_reward(env) for _ in range(5)])
+    print(f"TEST REWARD is {avg_reward}")
+    avg_rewards_list.append(avg_reward)
+    if avg_reward > best_reward:
+          print('Saving Model -- reward improved to: ' + str(avg_reward))
+          agentoo7.actor.save('Saved_Models/model_actor_{}_{}'.format(s, avg_reward), save_format='tf')
+          agentoo7.critic.save('Saved_Models/model_critic_{}_{}'.format(s, avg_reward), save_format='tf')
+          best_reward = avg_reward
+    if best_reward == 200:
+          target = True
+    # Reset the environment and the humanoid
+    total_reward = 0
+    steps_update_world = 0
+    world.end_episode()
+    world.reset()
 
-env.close()
+  env.close()
     
   
