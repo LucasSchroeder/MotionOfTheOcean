@@ -268,7 +268,8 @@ class CustomAgent(RLAgent):
         sr1 = tf.stack(sur1)
         sr2 = tf.stack(sur2)
 
-        loss = tf.math.negative(tf.reduce_mean(tf.math.minimum(sr1, sr2)) - closs + 0.001 * entropy)
+        aloss = -tf.reduce_mean(tf.math.minimum(sr1, sr2))
+        total_loss = 0.5 * closs + aloss - entropy * tf.reduce_mean(-(pb * tf.math.log(pb + 1e-10)))
         # loss = tf.reduce_mean(tf.math.minimum(sr1, sr2)) - closs + 0.001 * entropy
 
         return loss
@@ -425,7 +426,7 @@ def build_world(args, enable_draw):
 
 if __name__ == '__main__':
     args = sys.argv[1:]
-    enable_draw = False
+    enable_draw = True
     world = build_world(args, enable_draw)
 
     env = world.env
