@@ -187,12 +187,10 @@ class custom_actor(tf.keras.Model):
     self.num_actions = 36
     self.d1 = tf.keras.layers.Dense(1024,activation='relu')
     self.d2 = tf.keras.layers.Dense(512, activation='relu')
-    self.a = tf.keras.layers.Dense(self.num_actions, activation='softmax') # should this have softmax? The paper says it shouldn't
+    self.a = tf.keras.layers.Dense(self.num_actions) # should this have softmax? The paper says it shouldn't
 
   def call(self, input_data):
-    # print("input_data",input_data)
     layer1 = self.d1(input_data)
-    # print("layer1",layer1) #### This is becoming all NAN
     layer2 = self.d2(layer1)
     a = self.a(layer2)
     return a
@@ -219,35 +217,35 @@ class CustomAgent(RLAgent):
       self.actor = keras.models.load_model(in_path)
 
     def act(self,state):
-        action = self.actor(np.array([state]))
-        # prob = self.actor(np.array([state]))
-        # prob = prob.numpy()
+        prob = self.actor(np.array([state]))
+        prob = prob.numpy()
+        mu = tf.math.reduce_mean(prob)
+        std = tf.math.reduce_std(prob)
         # dist = tfp.distributions.Categorical(probs=prob, dtype=tf.float32)
-        # action = dist.sample()
-        # return int(action.numpy()[0])
+        # the mean should be a sample of distributions (whatever the actor returned)
+        dist = tfp.distributions.Normal(loc=prob, scale=std)
+        action = dist.sample()
         return action.numpy()[0]
     
     # TODO: WE NEED TO ADJUST THIS LOSS FUNCTION TO MATCH THE PAPER
     def actor_loss(self, probs, actions, adv, old_probs, closs):
         
-        probability = probs      
-        entropy = tf.reduce_mean(tf.math.negative(tf.math.multiply(probability,tf.math.log(probability))))
-        #print(probability)
-        #print(entropy)
+        probability = probs
+        # TODO: THE CALL TO LOG HERE IS RESULTING IN NaNs BECAUSE THE ACTION HAS NEGATIVE VALUES
+        entropy = tf.reduce_mean(tf.math.negative(tf.math.multiply(probability,tf.math.log(probability+ 1e-10))))
         sur1 = []
         sur2 = []
         
         for pb, t, op in zip(probability, adv, old_probs):
                         t =  tf.constant(t)
                         op =  tf.constant(op)
-                        #print(f"t{t}")
-                        #ratio = tf.math.exp(tf.math.log(pb + 1e-10) - tf.math.log(op + 1e-10))
-                        ratio = tf.math.divide(pb,op)
-                        #print(f"ratio{ratio}")
+                        
+                        # TODO: EITHER KEEP THE CURRENT CHANGE TO GET RID OF LOGS OR FIGURE OUT HOW
+                        # TO TAKE GET RID OF NEGATIVE VALUES IN THE ACTION BEFORE TAKING THE LOG
+                        # ratio = tf.math.exp(tf.math.log(pb + 1e-10) - tf.math.log(op + 1e-10))
+                        ratio = tf.math.divide(pb + 1e-10,op+ 1e-10)
                         s1 = tf.math.multiply(ratio,t)
-                        #print(f"s1{s1}")
                         s2 =  tf.math.multiply(tf.clip_by_value(ratio, 1.0 - self.clip_pram, 1.0 + self.clip_pram),t)
-                        #print(f"s2{s2}")
                         sur1.append(s1)
                         sur2.append(s2)
 
@@ -257,7 +255,6 @@ class CustomAgent(RLAgent):
         loss = tf.math.negative(tf.reduce_mean(tf.math.minimum(sr1, sr2)) - closs + 0.001 * entropy)
         # loss = tf.reduce_mean(tf.math.minimum(sr1, sr2)) - closs + 0.001 * entropy
 
-        #print(loss)
         return loss
 
     def learn(self, states, actions,  adv , old_probs, discnt_rewards):
@@ -292,10 +289,9 @@ def test_reward(env):
   state = env._humanoid.getState()
   done = False
   while not done:
-    action = agentoo7.act(state)
-    # print("ACTION (IN TEST_REWARD): ", action)
+    action = ppo_agent.act(state)
     # take a step with the environment 
-    agentoo7._apply_action(action)
+    ppo_agent._apply_action(action)
     next_state, reward, done = update_world(world)
 
     state = next_state
@@ -380,10 +376,8 @@ def build_arg_parser(args):
 
 def build_world(args, enable_draw):
   arg_parser = build_arg_parser(args)
-  print("enable_draw=", enable_draw)
   env = PyBulletDeepMimicEnv(arg_parser, enable_draw)
   world = RLWorld(env, arg_parser)
-  #world.env.set_playback_speed(playback_speed)
 
   motion_file = arg_parser.parse_string("motion_file")
   print("motion_file build=", motion_file)
@@ -415,7 +409,7 @@ if __name__ == '__main__':
   env = world.env
 
   tf.random.set_seed(336699)
-  agentoo7 = world.agents[0]
+  ppo_agent = world.agents[0]
   ppo_steps = 4096
   mini_batches = 256
   ep_reward = []
@@ -439,18 +433,14 @@ if __name__ == '__main__':
     probs = []
     dones = []
     values = []
-    print("new episod")
+    print("new episode")
 
-    # for e in range(mini_batches):
     for s in range(ppo_steps):
-      # world.reset()
-      # print("STATE: ", state)
-      action = agentoo7.act(state)
-      # print("action was: ", action)
-      # print("action type: ", type(action))
-      value = agentoo7.critic(np.array([state])).numpy()
+      action = ppo_agent.act(state)
+      # print("ACTION was: ", action)
+      value = ppo_agent.critic(np.array([state])).numpy()
       # take a step with the environment 
-      agentoo7._apply_action(action)
+      ppo_agent._apply_action(action)
       next_state, reward, done = update_world(world)
 
       # next_state, reward, done, _ = env.step(action)
@@ -464,28 +454,30 @@ if __name__ == '__main__':
       ########################### THIS LINE THAT CALLS PROB IS WRONG ###########
       # The action from the policy specifies target orientations for PD controllers
       # at each joint. IT DOES NOT SPECIFY PROBABILITIES!
-      prob = agentoo7.actor(np.array([state]))
-      probs.append(prob[0])
+      prob = ppo_agent.actor(np.array([state]))
+      # probs.append(prob[0])
+      probs.append(action)
       values.append(value[0][0])
       state = next_state
     
-    value = agentoo7.critic(np.array([state])).numpy()
+    value = ppo_agent.critic(np.array([state])).numpy()
     values.append(value[0][0])
-    np.reshape(probs, (len(probs),agentoo7.num_actions))
+    np.reshape(probs, (len(probs),ppo_agent.num_actions))
     probs = np.stack(probs, axis=0)
 
-    states, actions,returns, adv  = advantage_estimation(states, actions, rewards, dones, values, agentoo7.discount_factor, agentoo7.gamma)
+    states, actions,returns, adv  = advantage_estimation(states, actions, rewards, dones, values, ppo_agent.discount_factor, ppo_agent.gamma)
 
     ## Update the gradients
-    al,cl = agentoo7.learn(states, actions, adv, probs, returns)
+    print("Learning/ Updating Gradients")
+    al,cl = ppo_agent.learn(states, actions, adv, probs, returns)
 
     avg_reward = np.mean([test_reward(env) for _ in range(5)])
     print(f"TEST REWARD is {avg_reward}")
     avg_rewards_list.append(avg_reward)
     if avg_reward > best_reward:
           print('Saving Model -- reward improved to: ' + str(avg_reward))
-          agentoo7.actor.save('Saved_Models/{}_model_actor'.format(save_name), save_format='tf')
-          agentoo7.critic.save('Saved_Models/{}_model_critic'.format(save_name), save_format='tf')
+          ppo_agent.actor.save('Saved_Models/{}_model_actor'.format(save_name), save_format='tf')
+          ppo_agent.critic.save('Saved_Models/{}_model_critic'.format(save_name), save_format='tf')
           best_reward = avg_reward
     if best_reward == 200:
           target_reached = True
