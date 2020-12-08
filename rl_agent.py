@@ -116,20 +116,12 @@ class RLAgent():
   def has_goal(self):
     return self.get_goal_size() > 0
 
-  def predict_val(self):
-    return 0
-
-  def get_enable_training(self):
-    return self._enable_training
-
   def set_enable_training(self, enable):
     print("set_enable_training=", enable)
     self._enable_training = enable
     if (self._enable_training):
       self.reset()
     return
-
-  enable_training = property(get_enable_training, set_enable_training)
 
   def enable_testing(self):
     return self.test_episodes > 0
@@ -245,12 +237,6 @@ class RLAgent():
     self.path.goals.append(g)
     self.path.terminate = self.world.env.check_terminate(self.id)
 
-    return
-
-  def _update_exp_params(self):
-    lerp = float(self._total_sample_count) / self.exp_anneal_samples
-    lerp = np.clip(lerp, 0.0, 1.0)
-    self.exp_params_curr = self.exp_params_beg.lerp(self.exp_params_end, lerp)
     return
 
   def _update_test_return(self, path):
@@ -387,12 +373,3 @@ class RLAgent():
 
   def _get_iters_per_update(self):
     return MPIUtil.get_num_procs() * self.iters_per_update
-
-  def _valid_train_step(self):
-    return True
-
-  def _log_exp_params(self):
-    self.logger.log_tabular("Exp_Rate", self.exp_params_curr.rate)
-    self.logger.log_tabular("Exp_Noise", self.exp_params_curr.noise)
-    self.logger.log_tabular("Exp_Temp", self.exp_params_curr.temp)
-    return
