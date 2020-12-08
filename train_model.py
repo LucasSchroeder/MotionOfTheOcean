@@ -148,7 +148,6 @@ class RLWorld(object):
     return
 
   def _build_agent(self, id, agent_file):
-    Logger.print2('Agent {:d}: {}'.format(id, agent_file))
     if (agent_file == 'none'):
       agent = None
     else:
@@ -394,7 +393,6 @@ def build_world(args, enable_draw):
     assert AGENT_TYPE_KEY in json_data
     agent_type = json_data[AGENT_TYPE_KEY]
     print("agent_type=", agent_type)
-    # agent = PPOCustomAgent(world, id, json_data)
     agent = CustomAgent(world, id, json_data)
 
     agent.set_enable_training(False)
@@ -419,9 +417,6 @@ if __name__ == '__main__':
   avg_rewards_list = []
 
   while not target_reached:
-  # for s in range(ppo_steps):
-    if target_reached == True:
-            break
     
     done = False
     state = env._humanoid.getState() #env.reset()
@@ -439,15 +434,14 @@ if __name__ == '__main__':
       action = ppo_agent.act(state)
       # print("ACTION was: ", action)
       value = ppo_agent.critic(np.array([state])).numpy()
+      
       # take a step with the environment 
       ppo_agent._apply_action(action)
       next_state, reward, done = update_world(world)
 
-      # next_state, reward, done, _ = env.step(action)
       dones.append(1-done)
       rewards.append(reward)
       states.append(state)
-      #actions.append(tf.one_hot(action, 2, dtype=tf.int32).numpy().tolist())
       actions.append(action)
 
 
@@ -455,7 +449,6 @@ if __name__ == '__main__':
       # The action from the policy specifies target orientations for PD controllers
       # at each joint. IT DOES NOT SPECIFY PROBABILITIES!
       prob = ppo_agent.actor(np.array([state]))
-      # probs.append(prob[0])
       probs.append(action)
       values.append(value[0][0])
       state = next_state
@@ -471,7 +464,7 @@ if __name__ == '__main__':
     print("Learning/ Updating Gradients")
     al,cl = ppo_agent.learn(states, actions, adv, probs, returns)
 
-    avg_reward = np.mean([test_reward(env) for _ in range(5)])
+    avg_reward = np.mean([test_reward(env) for _ in range(32)])
     print(f"TEST REWARD is {avg_reward}")
     avg_rewards_list.append(avg_reward)
     if avg_reward > best_reward:
