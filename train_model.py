@@ -272,7 +272,7 @@ class CustomAgent(RLAgent):
         total_loss = 0.5 * closs + aloss - entropy * tf.reduce_mean(-(pb * tf.math.log(pb + 1e-10)))
         # loss = tf.reduce_mean(tf.math.minimum(sr1, sr2)) - closs + 0.001 * entropy
 
-        return loss
+        return total_loss
 
     def learn(self, states, actions, adv, old_probs, discnt_rewards):
         discnt_rewards = tf.reshape(discnt_rewards, (len(discnt_rewards),))
