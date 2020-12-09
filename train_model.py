@@ -205,8 +205,8 @@ class CustomAgent(RLAgent):
         self.discount_factor = 0.95
 
         self.a_opt = tf.keras.optimizers.SGD(learning_rate=0.00005,
-                                             momentum=0.9)  # policy step size of α(π) = 5 × 10^(−5)
-        self.c_opt = tf.keras.optimizers.SGD(learning_rate=0.01, momentum=0.9)  # value stepsize of α(v) = 10^(−2)
+                                             momentum=0.9, clipnorm=1.0)  # policy step size of α(π) = 5 × 10^(−5)
+        self.c_opt = tf.keras.optimizers.SGD(learning_rate=0.01, momentum=0.9, clipnorm=1.0)  # value stepsize of α(v) = 10^(−2)
         self.actor = custom_actor()
         self.critic = custom_critic()
         self.clip_pram = 0.2
@@ -259,7 +259,7 @@ class CustomAgent(RLAgent):
             # EITHER KEEP THE CURRENT CHANGE TO GET RID OF LOGS OR FIGURE OUT HOW
             # TO TAKE GET RID OF NEGATIVE VALUES IN THE ACTION BEFORE TAKING THE LOG
             ratio = tf.math.exp(tf.math.log(pb + 1e-10) - tf.math.log(op + 1e-10))
-            ratio = tf.math.divide(pb + 1e-10, op + 1e-10)
+            # ratio = tf.math.divide(pb + 1e-10, op + 1e-10)
             s1 = tf.math.multiply(ratio, t)
             s2 = tf.math.multiply(tf.clip_by_value(ratio, 1.0 - self.clip_pram, 1.0 + self.clip_pram), t)
             sur1.append(s1)
@@ -269,7 +269,7 @@ class CustomAgent(RLAgent):
         sr2 = tf.stack(sur2)
 
         aloss = -tf.reduce_mean(tf.math.minimum(sr1, sr2))
-        total_loss = 0.5 * closs + aloss - entropy * tf.reduce_mean(-(pb * tf.math.log(pb + 1e-10)))
+        total_loss = 0.5 * closs + aloss - 0.001 * tf.reduce_mean(-(probability * tf.math.log(probability + 1e-10)))
         # loss = tf.reduce_mean(tf.math.minimum(sr1, sr2)) - closs + 0.001 * entropy
 
         return total_loss
@@ -286,7 +286,7 @@ class CustomAgent(RLAgent):
             v = self.critic(states, training=True)
             v = tf.reshape(v, (len(v),))
             td = tf.math.subtract(discnt_rewards, v)
-            c_loss = 0.5 * kls.mean_squared_error(discnt_rewards, v)
+            c_loss = kls.mean_squared_error(discnt_rewards, v)
             # TODO: We need to figure out this loss function for the actor
             a_loss = self.actor_loss(p, actions, adv, old_probs, c_loss)
 
@@ -440,6 +440,7 @@ if __name__ == '__main__':
     target_reached = False
     best_reward = 0
     avg_rewards_list = []
+    test_iter = 1
 
     while not target_reached:
 
@@ -504,5 +505,12 @@ if __name__ == '__main__':
         steps_update_world = 0
         world.end_episode()
         world.reset()
+
+        # SAVE CSV FILE
+        file = open('rewards_log.csv','a')
+        file.write(str(test_iter)+','+str(avg_reward))
+        file.close()
+
+        test_iter = test_iter + 1
 
     env.close()
