@@ -426,7 +426,7 @@ def build_world(args, enable_draw):
 
 if __name__ == '__main__':
     args = sys.argv[1:]
-    enable_draw = True
+    enable_draw = False
     world = build_world(args, enable_draw)
 
     env = world.env
