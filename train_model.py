@@ -259,7 +259,7 @@ class CustomAgent(RLAgent):
             # EITHER KEEP THE CURRENT CHANGE TO GET RID OF LOGS OR FIGURE OUT HOW
             # TO TAKE GET RID OF NEGATIVE VALUES IN THE ACTION BEFORE TAKING THE LOG
             ratio = tf.math.exp(tf.math.log(pb + 1e-10) - tf.math.log(op + 1e-10))
-            ratio = tf.math.divide(pb + 1e-10, op + 1e-10)
+            # ratio = tf.math.divide(pb + 1e-10, op + 1e-10)
             s1 = tf.math.multiply(ratio, t)
             s2 = tf.math.multiply(tf.clip_by_value(ratio, 1.0 - self.clip_pram, 1.0 + self.clip_pram), t)
             sur1.append(s1)
@@ -269,7 +269,7 @@ class CustomAgent(RLAgent):
         sr2 = tf.stack(sur2)
 
         aloss = -tf.reduce_mean(tf.math.minimum(sr1, sr2))
-        total_loss = 0.5 * closs + aloss - entropy * tf.reduce_mean(-(pb * tf.math.log(pb + 1e-10)))
+        total_loss = aloss - entropy * tf.reduce_mean(-(pb * tf.math.log(pb + 1e-10)))
         # loss = tf.reduce_mean(tf.math.minimum(sr1, sr2)) - closs + 0.001 * entropy
 
         return total_loss
