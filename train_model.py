@@ -119,12 +119,7 @@ class RLWorld(object):
         return next_state, reward, is_done
 
     def reset(self):
-        self._reset_agents()
         self._reset_env()
-        return
-
-    def end_episode(self):
-        self._end_episode_agents()
         return
 
     def _update_env(self, timestep):
@@ -133,18 +128,6 @@ class RLWorld(object):
 
     def _reset_env(self):
         self.env.reset()
-        return
-
-    def _reset_agents(self):
-        for agent in self.agents:
-            if (agent != None):
-                agent.reset()
-        return
-
-    def _end_episode_agents(self):
-        for agent in self.agents:
-            if (agent != None):
-                agent.end_episode()
         return
 
     def _build_agent(self, id, agent_file):
@@ -273,7 +256,6 @@ class CustomAgent(RLAgent):
 def test_reward(env):
     steps_update_world = 0
     total_reward = 0
-    world.end_episode()
     world.reset()
     total_reward_count = 0
     state = env._humanoid.getState()
@@ -303,7 +285,7 @@ def test_reward(env):
 # even if we do not get good rewards in the next time step after the action we tool, 
 # we still look at few time steps after that action into the longer future to see how 
 # out model performed in the long run
-def advantage_estimation(states, actions, rewards, done, values, discount_factor, gamma):
+def advantage_estimation(rewards, done, values, discount_factor, gamma):
     # initialize advantage and empty list
     gae = 0
     returns = []
@@ -323,10 +305,9 @@ def advantage_estimation(states, actions, rewards, done, values, discount_factor
     returns.reverse()
     adv = np.array(returns, dtype=np.float32) - values[:-1]
     adv = (adv - np.mean(adv)) / (np.std(adv) + 1e-10)
-    states = np.array(states, dtype=np.float32)
-    actions = np.array(actions, dtype=np.int32)
     returns = np.array(returns, dtype=np.float32)
-    return states, actions, returns, adv
+
+    return returns, adv
 
 
 total_reward = 0
@@ -347,7 +328,6 @@ def update_world(world):
         print("total_reward =", total_reward)
         total_reward = 0
         steps_update_world = 0
-        world.end_episode()
         world.reset()
     return next_state, reward, is_done
 
@@ -449,8 +429,10 @@ if __name__ == '__main__':
         np.reshape(probs, (len(probs), ppo_agent.num_actions))
         probs = np.stack(probs, axis=0)
 
-        states, actions, returns, adv = advantage_estimation(states, actions, rewards, dones, values,
+        returns, adv = advantage_estimation(rewards, dones, values,
                                                              ppo_agent.discount_factor, ppo_agent.gamma)
+        states = np.array(states, dtype=np.float32)
+        actions = np.array(actions, dtype=np.int32)
 
         ## Update the gradients
         print("Learning/ Updating Gradients")
@@ -469,7 +451,6 @@ if __name__ == '__main__':
         # Reset the environment and the humanoid
         total_reward = 0
         steps_update_world = 0
-        world.end_episode()
         world.reset()
 
         # SAVE CSV FILE

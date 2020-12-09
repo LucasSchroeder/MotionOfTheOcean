@@ -28,7 +28,6 @@ class RLAgent():
   ITERS_PER_UPDATE = "ItersPerUpdate"
   DISCOUNT_KEY = "Discount"
   MINI_BATCH_SIZE_KEY = "MiniBatchSize"
-  REPLAY_BUFFER_SIZE_KEY = "ReplayBufferSize"
   INIT_SAMPLES_KEY = "InitSamples"
   NORMALIZER_SAMPLES_KEY = "NormalizerSamples"
 
@@ -47,7 +46,6 @@ class RLAgent():
     self._mode = self.Mode.TRAIN
 
     self._enable_training = True
-    self.path = Path()
     self.iter = int(0)
     self.start_time = time.time()
     self._update_counter = 0
@@ -56,7 +54,6 @@ class RLAgent():
     self.iters_per_update = int(1)
     self.discount = 0.95
     self.mini_batch_size = int(32)
-    self.replay_buffer_size = int(50000)
     self.init_samples = int(1000)
     self.normalizer_samples = np.inf
     self._local_mini_batch_size = self.mini_batch_size  # batch size for each work for multiprocessing
@@ -78,39 +75,9 @@ class RLAgent():
     self.exp_params_curr = ExpParams()
 
     self._load_params(json_data)
-    self._build_replay_buffer(self.replay_buffer_size)
     # self._build_normalizers()
     self._build_bounds()
-    self.reset()
 
-    return
-
-  def __str__(self):
-    action_space_str = str(self.get_action_space())
-    info_str = ""
-    info_str += '"ID": {:d},\n "Type": "{:s}",\n "ActionSpace": "{:s}",\n "StateDim": {:d},\n "GoalDim": {:d},\n "ActionDim": {:d}'.format(
-        self.id, self.NAME, action_space_str[action_space_str.rfind('.') + 1:],
-        self.get_state_size(), self.get_goal_size(), self.get_action_size())
-    return "{\n" + info_str + "\n}"
-
-  def reset(self):
-    self.path.clear()
-    return
-
-  def end_episode(self):
-    if (self.path.pathlength() > 0):
-      self._end_path()
-
-      if (self._mode == self.Mode.TRAIN or self._mode == self.Mode.TRAIN_END):
-        if (self.enable_training and self.path.pathlength() > 0):
-          self._store_path(self.path)
-      elif (self._mode == self.Mode.TEST):
-        self._update_test_return(self.path)
-      else:
-        assert False, Logger.print2("Unsupported RL agent mode" + str(self._mode))
-
-      self._update_mode()
-      print("_update_mode")
     return
 
   def has_goal(self):
@@ -125,24 +92,6 @@ class RLAgent():
 
   def enable_testing(self):
     return self.test_episodes > 0
-
-  def get_name(self):
-    return self.NAME
-
-  def get_action_space(self):
-    return self.world.env.get_action_space(self.id)
-
-  def get_state_size(self):
-    return self.world.env.get_state_size(self.id)
-
-  def get_goal_size(self):
-    return self.world.env.get_goal_size(self.id)
-
-  def get_action_size(self):
-    return self.world.env.get_action_size(self.id)
-
-  def get_num_actions(self):
-    return self.world.env.get_num_actions(self.id)
 
   def need_new_action(self):
     return self.world.env.need_new_action(self.id)
@@ -164,9 +113,6 @@ class RLAgent():
 
     if (self.MINI_BATCH_SIZE_KEY in json_data):
       self.mini_batch_size = int(json_data[self.MINI_BATCH_SIZE_KEY])
-
-    if (self.REPLAY_BUFFER_SIZE_KEY in json_data):
-      self.replay_buffer_size = int(json_data[self.REPLAY_BUFFER_SIZE_KEY])
 
     if (self.INIT_SAMPLES_KEY in json_data):
       self.init_samples = int(json_data[self.INIT_SAMPLES_KEY])
@@ -220,12 +166,6 @@ class RLAgent():
   def _apply_action(self, a):
     self.world.env.set_action(self.id, a)
     return
-
-  def _record_flags(self):
-    return int(0)
-
-  def _is_first_step(self):
-    return len(self.path.states) == 0
 
   def _end_path(self):
     s = self._record_state()
@@ -316,60 +256,9 @@ class RLAgent():
 
     return val_offset, val_scale
 
-  def _calc_term_vals(self, discount):
-    r_fail = self.world.env.get_reward_fail(self.id)
-    r_succ = self.world.env.get_reward_succ(self.id)
-
-    r_min = self.world.env.get_reward_min(self.id)
-    r_max = self.world.env.get_reward_max(self.id)
-    assert (r_fail <= r_max and r_fail >= r_min)
-    assert (r_succ <= r_max and r_succ >= r_min)
-    assert (not np.isinf(r_fail))
-    assert (not np.isinf(r_succ))
-
-    if (discount == 0):
-      val_fail = 0
-      val_succ = 0
-    else:
-      val_fail = r_fail / (1.0 - discount)
-      val_succ = r_succ / (1.0 - discount)
-
-    return val_fail, val_succ
-
   def _enable_draw(self):
     return self.world.env.enable_draw
 
-  def _log_val(self, s, g):
-    pass
-
-  def _build_replay_buffer(self, buffer_size):
-    num_procs = MPIUtil.get_num_procs()
-    buffer_size = int(buffer_size / num_procs)
-    self.replay_buffer = ReplayBuffer(buffer_size=buffer_size)
-    self.replay_buffer_initialized = False
-    return
-
-  def _store_path(self, path):
-    path_id = self.replay_buffer.store(path)
-    valid_path = path_id != MathUtil.INVALID_IDX
-
-    if valid_path:
-      self.train_return = path.calc_return()
-
-      if self._need_normalizer_update:
-        self._record_normalizers(path)
-
-    return path_id
-
-  def _record_normalizers(self, path):
-    states = np.array(path.states)
-    self.s_norm.record(states)
-
-    if self.has_goal():
-      goals = np.array(path.goals)
-      self.g_norm.record(goals)
-
-    return
 
   def _get_iters_per_update(self):
     return MPIUtil.get_num_procs() * self.iters_per_update
