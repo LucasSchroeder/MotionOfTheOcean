@@ -76,9 +76,6 @@ class RLWorld(object):
     def build_agents(self):
         self.agents = []
 
-        Logger.print2('')
-        Logger.print2('Num Agents: {:d}'.format(1))
-
         agent_files = self.arg_parser.parse_strings('agent_files')
         print("len(agent_files)=", len(agent_files))
         assert (len(agent_files) == 1 or len(agent_files) == 0)
@@ -98,7 +95,6 @@ class RLWorld(object):
                     curr_agent.load_model(os.getcwd() + "/" + curr_model_file)
 
         self.agents.append(curr_agent)
-        Logger.print2('')
 
         self.set_enable_training(self.enable_training)
 
@@ -168,9 +164,9 @@ class custom_actor(tf.keras.Model):
 
 class CustomAgent(RLAgent):
     def __init__(self, world, id, json_data, gamma=0.95):
-        super().__init__(world, id, json_data)
         self.world = world
         self.id = id
+        super().__init__(json_data)
         self.gamma = gamma
         self.discount_factor = 0.95
 

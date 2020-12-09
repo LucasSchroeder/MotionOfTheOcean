@@ -22,57 +22,17 @@ class RLAgent():
     TEST = 1
     TRAIN_END = 2
 
-  NAME = "None"
-
-  UPDATE_PERIOD_KEY = "UpdatePeriod"
-  ITERS_PER_UPDATE = "ItersPerUpdate"
   DISCOUNT_KEY = "Discount"
-  MINI_BATCH_SIZE_KEY = "MiniBatchSize"
-  INIT_SAMPLES_KEY = "InitSamples"
-  NORMALIZER_SAMPLES_KEY = "NormalizerSamples"
-
-  OUTPUT_ITERS_KEY = "OutputIters"
-  INT_OUTPUT_ITERS_KEY = "IntOutputIters"
   TEST_EPISODES_KEY = "TestEpisodes"
 
-  EXP_ANNEAL_SAMPLES_KEY = "ExpAnnealSamples"
-  EXP_PARAM_BEG_KEY = "ExpParamsBeg"
-  EXP_PARAM_END_KEY = "ExpParamsEnd"
-
-  def __init__(self, world, id, json_data):
-    self.world = world
-    self.id = id
-    self.logger = Logger()
+  def __init__(self, json_data):
     self._mode = self.Mode.TRAIN
 
     self._enable_training = True
-    self.iter = int(0)
-    self.start_time = time.time()
-    self._update_counter = 0
-
-    self.update_period = 1.0  # simulated time (seconds) before each training update
-    self.iters_per_update = int(1)
     self.discount = 0.95
-    self.mini_batch_size = int(32)
-    self.init_samples = int(1000)
-    self.normalizer_samples = np.inf
-    self._local_mini_batch_size = self.mini_batch_size  # batch size for each work for multiprocessing
-    self._need_normalizer_update = True
-    self._total_sample_count = 0
 
-    self.output_iters = 100
-    self.int_output_iters = 100
-
-    self.train_return = 0.0
     self.test_episodes = int(0)
     self.test_episode_count = int(0)
-    self.test_return = 0.0
-    self.avg_test_return = 0.0
-
-    self.exp_anneal_samples = 320000
-    self.exp_params_beg = ExpParams()
-    self.exp_params_end = ExpParams()
-    self.exp_params_curr = ExpParams()
 
     self._load_params(json_data)
     self._build_bounds()
@@ -82,8 +42,6 @@ class RLAgent():
   def set_enable_training(self, enable):
     print("set_enable_training=", enable)
     self._enable_training = enable
-    if (self._enable_training):
-      self.reset()
     return
 
   def enable_testing(self):
@@ -95,52 +53,12 @@ class RLAgent():
     return
 
   def _load_params(self, json_data):
-    if (self.UPDATE_PERIOD_KEY in json_data):
-      self.update_period = int(json_data[self.UPDATE_PERIOD_KEY])
-
-    if (self.ITERS_PER_UPDATE in json_data):
-      self.iters_per_update = int(json_data[self.ITERS_PER_UPDATE])
 
     if (self.DISCOUNT_KEY in json_data):
       self.discount = json_data[self.DISCOUNT_KEY]
 
-    if (self.MINI_BATCH_SIZE_KEY in json_data):
-      self.mini_batch_size = int(json_data[self.MINI_BATCH_SIZE_KEY])
-
-    if (self.INIT_SAMPLES_KEY in json_data):
-      self.init_samples = int(json_data[self.INIT_SAMPLES_KEY])
-
-    if (self.NORMALIZER_SAMPLES_KEY in json_data):
-      self.normalizer_samples = int(json_data[self.NORMALIZER_SAMPLES_KEY])
-
-    if (self.OUTPUT_ITERS_KEY in json_data):
-      self.output_iters = json_data[self.OUTPUT_ITERS_KEY]
-
-    if (self.INT_OUTPUT_ITERS_KEY in json_data):
-      self.int_output_iters = json_data[self.INT_OUTPUT_ITERS_KEY]
-
     if (self.TEST_EPISODES_KEY in json_data):
       self.test_episodes = int(json_data[self.TEST_EPISODES_KEY])
-
-    if (self.EXP_ANNEAL_SAMPLES_KEY in json_data):
-      self.exp_anneal_samples = json_data[self.EXP_ANNEAL_SAMPLES_KEY]
-
-    if (self.EXP_PARAM_BEG_KEY in json_data):
-      self.exp_params_beg.load(json_data[self.EXP_PARAM_BEG_KEY])
-
-    if (self.EXP_PARAM_END_KEY in json_data):
-      self.exp_params_end.load(json_data[self.EXP_PARAM_END_KEY])
-
-    num_procs = MPIUtil.get_num_procs()
-    self._local_mini_batch_size = int(np.ceil(self.mini_batch_size / num_procs))
-    self._local_mini_batch_size = np.maximum(self._local_mini_batch_size, 1)
-    self.mini_batch_size = self._local_mini_batch_size * num_procs
-
-    assert (self.exp_params_beg.noise == self.exp_params_end.noise)  # noise std should not change
-    self.exp_params_curr = copy.deepcopy(self.exp_params_beg)
-    self.exp_params_end.noise = self.exp_params_beg.noise
-
-    self._need_normalizer_update = self.normalizer_samples > 0
 
     return
 
@@ -161,10 +79,6 @@ class RLAgent():
 
   def _update_mode_test(self):
     if (self.test_episode_count * MPIUtil.get_num_procs() >= self.test_episodes):
-      global_return = MPIUtil.reduce_sum(self.test_return)
-      global_count = MPIUtil.reduce_sum(self.test_episode_count)
-      avg_return = global_return / global_count
-      self.avg_test_return = avg_return
 
       if self.enable_training:
         self._init_mode_train()
@@ -181,7 +95,6 @@ class RLAgent():
 
   def _init_mode_test(self):
     self._mode = self.Mode.TEST
-    self.test_return = 0.0
     self.test_episode_count = 0
     self.world.env.set_mode(self._mode)
     return
@@ -205,10 +118,3 @@ class RLAgent():
       val_scale = 2 / (val_max - val_min)
 
     return val_offset, val_scale
-
-  def _enable_draw(self):
-    return self.world.env.enable_draw
-
-
-  def _get_iters_per_update(self):
-    return MPIUtil.get_num_procs() * self.iters_per_update
