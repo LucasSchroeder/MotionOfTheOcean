@@ -235,30 +235,37 @@ class CustomAgent(RLAgent):
         min_old_prob = tf.math.reduce_min(old_probs)
         old_probs = [(x - min_old_prob + .0000001) / (max_old_pb - min_old_prob) for x in old_probs]
         old_probs = tf.convert_to_tensor(old_probs)
+        
 
-        sur1 = []
-        sur2 = []
+        # sur1 = []
+        # sur2 = []
 
-        for pb, t, op in zip(probability, adv, old_probs):
-            t = tf.constant(t)
-            op = tf.constant(op)
+        # for pb, t, op in zip(probability, adv, old_probs):
+        #     t = tf.constant(t)
+        #     op = tf.constant(op)
 
-            # TODO:
-            # EITHER KEEP THE CURRENT CHANGE TO GET RID OF LOGS OR FIGURE OUT HOW
-            # TO TAKE GET RID OF NEGATIVE VALUES IN THE ACTION BEFORE TAKING THE LOG
-            ratio = tf.math.exp(tf.math.log(pb + 1e-10) - tf.math.log(op + 1e-10))
-            # ratio = tf.math.divide(pb + 1e-10, op + 1e-10)
-            s1 = tf.math.multiply(ratio, t)
-            s2 = tf.math.multiply(tf.clip_by_value(ratio, 1.0 - self.clip_pram, 1.0 + self.clip_pram), t)
-            sur1.append(s1)
-            sur2.append(s2)
+        #     # TODO:
+        #     # EITHER KEEP THE CURRENT CHANGE TO GET RID OF LOGS OR FIGURE OUT HOW
+        #     # TO TAKE GET RID OF NEGATIVE VALUES IN THE ACTION BEFORE TAKING THE LOG
+        #     ratio = tf.math.exp(tf.math.log(probability + 1e-10) - tf.math.log(old_probs + 1e-10))
+        #     # ratio = tf.math.divide(pb + 1e-10, op + 1e-10)
+        #     s1 = tf.math.multiply(ratio, adv)
+        #     s2 = tf.math.multiply(tf.clip_by_value(ratio, 1.0 - self.clip_pram, 1.0 + self.clip_pram), adv)
+        #     sur1.append(s1)
+        #     sur2.append(s2)
 
-        sr1 = tf.stack(sur1)
-        sr2 = tf.stack(sur2)
+        # sr1 = tf.stack(sur1)
+        # sr2 = tf.stack(sur2)
+        ratio = tf.math.exp(tf.math.log(probability + 1e-10) - tf.math.log(old_probs + 1e-10))
+        print("tf.transpose(ratio) shape: ", tf.transpose(ratio).shape)
+        print("adv shape: ", adv.shape)
+        sr1 = tf.math.multiply(tf.transpose(ratio), adv)
+        sr2 = tf.math.multiply(tf.clip_by_value(tf.transpose(ratio), 1.0 - self.clip_pram, 1.0 + self.clip_pram), adv)
 
         aloss = -tf.reduce_mean(tf.math.minimum(sr1, sr2))
         total_loss = 0.5 * closs + aloss - 0.001 * tf.reduce_mean(-(probability * tf.math.log(probability + 1e-10)))
 
+        print("total_loss: ", total_loss)
         return total_loss
 
     def learn(self, states, actions, adv, old_probs, discnt_rewards):
