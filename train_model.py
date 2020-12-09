@@ -440,6 +440,7 @@ if __name__ == '__main__':
     target_reached = False
     best_reward = 0
     avg_rewards_list = []
+    test_iter = 1
 
     while not target_reached:
 
@@ -504,5 +505,12 @@ if __name__ == '__main__':
         steps_update_world = 0
         world.end_episode()
         world.reset()
+
+        # SAVE CSV FILE
+        file = open('rewards_log.csv','a')
+        file.write(str(test_iter)+','+str(avg_reward))
+        file.close()
+
+        test_iter = test_iter + 1
 
     env.close()
