@@ -12,10 +12,8 @@ from tensorflow import keras
 import tensorflow_probability as tfp
 import tensorflow.keras.losses as kls
 from rl_agent import RLAgent
-import pybullet_utils.mpi_util as MPIUtil
 from pybullet_envs.deep_mimic.env.env import Env
 from custom_reward import getRewardCustom
-from pybullet_envs.deep_mimic.env.action_space import ActionSpace
 from pybullet_envs.deep_mimic.env.pybullet_deep_mimic_env import PyBulletDeepMimicEnv
 
 from pybullet_utils.arg_parser import ArgParser
