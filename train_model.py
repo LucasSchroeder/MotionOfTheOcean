@@ -186,7 +186,7 @@ class custom_actor(tf.keras.Model):
         self.num_actions = 36
         self.d1 = tf.keras.layers.Dense(1024, activation='relu')
         self.d2 = tf.keras.layers.Dense(512, activation='relu')
-        self.a = tf.keras.layers.Dense(self.num_actions)  # should this have softmax? The paper says it shouldn't
+        self.a = tf.keras.layers.Dense(self.num_actions)
 
     def call(self, input_data):
         layer1 = self.d1(input_data)
@@ -227,7 +227,6 @@ class CustomAgent(RLAgent):
         action = dist.sample()
         return action.numpy()[0]
 
-    # TODO: WE NEED TO ADJUST THIS LOSS FUNCTION TO MATCH THE PAPER
     def actor_loss(self, probs, actions, adv, old_probs, closs):
         probability = probs
         # normalize probability
@@ -280,17 +279,26 @@ class CustomAgent(RLAgent):
         old_p = old_probs
 
         old_p = tf.reshape(old_p, (len(old_p), self.num_actions))
-        with tf.GradientTape() as tape1, tf.GradientTape() as tape2:
-            p = self.actor(states, training=True)
+        with tf.GradientTape() as tape1:
             v = self.critic(states, training=True)
             v = tf.reshape(v, (len(v),))
-            td = tf.math.subtract(discnt_rewards, v)
             c_loss = kls.mean_squared_error(discnt_rewards, v)
-            # TODO: We need to figure out this loss function for the actor
+
+        with tf.GradientTape() as tape2:
+            p = self.actor(states, training=True)
             a_loss = self.actor_loss(p, actions, adv, old_probs, c_loss)
 
-        grads1 = tape1.gradient(a_loss, self.actor.trainable_variables)
-        grads2 = tape2.gradient(c_loss, self.critic.trainable_variables)
+        # with tf.GradientTape() as tape1, tf.GradientTape() as tape2:
+        #     p = self.actor(states, training=True)
+        #     v = self.critic(states, training=True)
+        #     v = tf.reshape(v, (len(v),))
+        #     td = tf.math.subtract(discnt_rewards, v)
+        #     c_loss = kls.mean_squared_error(discnt_rewards, v)
+        #     # TODO: We need to figure out this loss function for the actor
+        #     a_loss = self.actor_loss(p, actions, adv, old_probs, c_loss)
+
+        grads1 = tape2.gradient(a_loss, self.actor.trainable_variables)
+        grads2 = tape1.gradient(c_loss, self.critic.trainable_variables)
         self.a_opt.apply_gradients(zip(grads1, self.actor.trainable_variables))
         self.c_opt.apply_gradients(zip(grads2, self.critic.trainable_variables))
         return a_loss, c_loss
