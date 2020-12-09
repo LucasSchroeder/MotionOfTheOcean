@@ -205,8 +205,8 @@ class CustomAgent(RLAgent):
         self.discount_factor = 0.95
 
         self.a_opt = tf.keras.optimizers.SGD(learning_rate=0.00005,
-                                             momentum=0.9)  # policy step size of α(π) = 5 × 10^(−5)
-        self.c_opt = tf.keras.optimizers.SGD(learning_rate=0.01, momentum=0.9)  # value stepsize of α(v) = 10^(−2)
+                                             momentum=0.9, clipnorm=1.0)  # policy step size of α(π) = 5 × 10^(−5)
+        self.c_opt = tf.keras.optimizers.SGD(learning_rate=0.01, momentum=0.9, clipnorm=1.0)  # value stepsize of α(v) = 10^(−2)
         self.actor = custom_actor()
         self.critic = custom_critic()
         self.clip_pram = 0.2
@@ -261,9 +261,9 @@ class CustomAgent(RLAgent):
             # EITHER KEEP THE CURRENT CHANGE TO GET RID OF LOGS OR FIGURE OUT HOW
             # TO TAKE GET RID OF NEGATIVE VALUES IN THE ACTION BEFORE TAKING THE LOG
             ratio = tf.math.exp(tf.math.log(pb + 1e-10) - tf.math.log(op + 1e-10))
+            # ratio = tf.math.divide(pb + 1e-10, op + 1e-10)
             print("ratio is: ", ratio)
             print("advantage is: ", t)
-            # ratio = tf.math.divide(pb + 1e-10, op + 1e-10)
             s1 = tf.math.multiply(ratio, t)
             s2 = tf.math.multiply(tf.clip_by_value(ratio, 1.0 - self.clip_pram, 1.0 + self.clip_pram), t)
             sur1.append(s1)
@@ -452,6 +452,7 @@ if __name__ == '__main__':
     target_reached = False
     best_reward = 0
     avg_rewards_list = []
+    test_iter = 1
 
     while not target_reached:
 
@@ -504,6 +505,9 @@ if __name__ == '__main__':
         avg_reward = np.mean([test_reward(env) for _ in range(32)])
         print(f"TEST REWARD is {avg_reward}")
         avg_rewards_list.append(avg_reward)
+        file = open('rewards_log.csv','a')
+        file.write(str(test_iter)+','+str(avg_reward))
+        file.close()
         if avg_reward > best_reward:
             print('Saving Model -- reward improved to: ' + str(avg_reward))
             ppo_agent.actor.save('Saved_Models/{}_model_actor'.format(save_name), save_format='tf')
