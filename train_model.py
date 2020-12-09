@@ -9,7 +9,6 @@ os.sys.path.insert(0, parentdir)
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
-import gym
 import tensorflow_probability as tfp
 import tensorflow.keras.losses as kls
 from rl_agent import RLAgent
