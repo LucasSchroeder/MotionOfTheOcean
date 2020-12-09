@@ -151,13 +151,9 @@ class RLWorld(object):
         if (agent_file == 'none'):
             agent = None
         else:
-            AGENT_TYPE_KEY = "AgentType"
             agent = None
             with open(os.getcwd() + "/" + agent_file) as data_file:
                 json_data = json.load(data_file)
-
-                assert AGENT_TYPE_KEY in json_data
-                agent_type = json_data[AGENT_TYPE_KEY]
 
                 agent = CustomAgent(self, id, json_data)
 
@@ -221,14 +217,13 @@ class CustomAgent(RLAgent):
         prob = prob.numpy()
         mu = tf.math.reduce_mean(prob)
         std = tf.math.reduce_std(prob)
-        # dist = tfp.distributions.Categorical(probs=prob, dtype=tf.float32)
+
         # the mean should be a sample of distributions (whatever the actor returned)
         dist = tfp.distributions.Normal(loc=prob, scale=std)
         action = dist.sample()
         return action.numpy()[0]
 
-    def actor_loss(self, probs, actions, adv, old_probs, closs):
-        probability = probs
+    def actor_loss(self, probability, actions, adv, old_probs, closs):
         # normalize probability
         max_pb = tf.math.reduce_max(probability)
         min_pb = tf.math.reduce_min(probability)
@@ -241,11 +236,6 @@ class CustomAgent(RLAgent):
         old_probs = [(x - min_old_prob + .0000001) / (max_old_pb - min_old_prob) for x in old_probs]
         old_probs = tf.convert_to_tensor(old_probs)
 
-        # print(probability)
-        # print(entropy)
-        # TODO: THE CALL TO LOG HERE IS RESULTING IN NaNs BECAUSE THE ACTION HAS NEGATIVE VALUES
-        entropy = tf.reduce_mean(tf.math.negative(tf.math.multiply(probability,
-                                                                   tf.math.log(probability + 1e-10))))
         sur1 = []
         sur2 = []
 
@@ -268,7 +258,6 @@ class CustomAgent(RLAgent):
 
         aloss = -tf.reduce_mean(tf.math.minimum(sr1, sr2))
         total_loss = 0.5 * closs + aloss - 0.001 * tf.reduce_mean(-(probability * tf.math.log(probability + 1e-10)))
-        # loss = tf.reduce_mean(tf.math.minimum(sr1, sr2)) - closs + 0.001 * entropy
 
         return total_loss
 
@@ -288,14 +277,6 @@ class CustomAgent(RLAgent):
             p = self.actor(states, training=True)
             a_loss = self.actor_loss(p, actions, adv, old_probs, c_loss)
 
-        # with tf.GradientTape() as tape1, tf.GradientTape() as tape2:
-        #     p = self.actor(states, training=True)
-        #     v = self.critic(states, training=True)
-        #     v = tf.reshape(v, (len(v),))
-        #     td = tf.math.subtract(discnt_rewards, v)
-        #     c_loss = kls.mean_squared_error(discnt_rewards, v)
-        #     # TODO: We need to figure out this loss function for the actor
-        #     a_loss = self.actor_loss(p, actions, adv, old_probs, c_loss)
 
         grads1 = tape2.gradient(a_loss, self.actor.trainable_variables)
         grads2 = tape1.gradient(c_loss, self.critic.trainable_variables)
@@ -310,11 +291,12 @@ def test_reward(env):
     world.end_episode()
     world.reset()
     total_reward_count = 0
-    # state = env.reset()
     state = env._humanoid.getState()
     done = False
+
     while not done:
         action = ppo_agent.act(state)
+
         # take a step with the environment 
         ppo_agent._apply_action(action)
         next_state, reward, done = update_world(world)
@@ -322,6 +304,7 @@ def test_reward(env):
         state = next_state
         total_reward_count += reward
         done = world.env.is_episode_end()
+
     return total_reward_count
 
 
@@ -369,7 +352,6 @@ update_timestep = 1. / 240.
 def update_world(world):
     next_state, reward, is_done = world.update(update_timestep)
 
-    # reward = world.env.calc_reward(agent_id=0)
     global total_reward
     total_reward += reward
     global steps_update_world
@@ -377,7 +359,7 @@ def update_world(world):
 
     end_episode = world.env.is_episode_end()
     if (end_episode or steps_update_world >= 1000):
-        print("total_reward adfkjdkfsdf =", total_reward)
+        print("total_reward =", total_reward)
         total_reward = 0
         steps_update_world = 0
         world.end_episode()
@@ -409,25 +391,18 @@ def build_world(args, enable_draw):
     env = PyBulletDeepMimicEnv(arg_parser, enable_draw)
     world = RLWorld(env, arg_parser)
 
-    motion_file = arg_parser.parse_string("motion_file")
-    print("motion_file build=", motion_file)
-    bodies = arg_parser.parse_ints("fall_contact_bodies")
-    print("bodies=", bodies)
     agent_files = os.getcwd() + "/" + arg_parser.parse_string("agent_files")
 
-    AGENT_TYPE_KEY = "AgentType"
-
-    print("agent_file=", agent_files)
     with open(agent_files) as data_file:
         json_data = json.load(data_file)
         print("json_data=", json_data)
-        assert AGENT_TYPE_KEY in json_data
-        agent_type = json_data[AGENT_TYPE_KEY]
-        print("agent_type=", agent_type)
+
+        # build the custom agent
         agent = CustomAgent(world, id, json_data)
 
         agent.set_enable_training(False)
         world.reset()
+
     return world
 
 
@@ -452,7 +427,7 @@ if __name__ == '__main__':
     while not target_reached:
 
         done = False
-        state = env._humanoid.getState()  # env.reset()
+        state = env._humanoid.getState()
         all_aloss = []
         all_closs = []
         rewards = []
@@ -461,11 +436,10 @@ if __name__ == '__main__':
         probs = []
         dones = []
         values = []
-        print("new episode")
+        print("STARTING A NEW EPISODE")
 
         for s in range(ppo_steps):
             action = ppo_agent.act(state)
-            # print("ACTION was: ", action)
             value = ppo_agent.critic(np.array([state])).numpy()
 
             # take a step with the environment 
