@@ -105,7 +105,7 @@ class RLWorld(object):
         return
 
     def update(self, timestep):
-        self._update_env(timestep)
+        self.env.update(timestep)
 
         # compute next state
         next_state = self.env._humanoid.getState()
@@ -119,14 +119,6 @@ class RLWorld(object):
         return next_state, reward, is_done
 
     def reset(self):
-        self._reset_env()
-        return
-
-    def _update_env(self, timestep):
-        self.env.update(timestep)
-        return
-
-    def _reset_env(self):
         self.env.reset()
         return
 
@@ -191,6 +183,10 @@ class CustomAgent(RLAgent):
 
         self.state_size = 197
         self.num_actions = 36
+
+    def _apply_action(self, a):
+        self.world.env.set_action(self.id, a)
+        return
 
     def load_model(self, in_path):
         self.actor = keras.models.load_model(in_path)

@@ -75,13 +75,9 @@ class RLAgent():
     self.exp_params_curr = ExpParams()
 
     self._load_params(json_data)
-    # self._build_normalizers()
     self._build_bounds()
 
     return
-
-  def has_goal(self):
-    return self.get_goal_size() > 0
 
   def set_enable_training(self, enable):
     print("set_enable_training=", enable)
@@ -92,9 +88,6 @@ class RLAgent():
 
   def enable_testing(self):
     return self.test_episodes > 0
-
-  def need_new_action(self):
-    return self.world.env.need_new_action(self.id)
 
   def _build_bounds(self):
     self.a_bound_min = self.world.env.build_action_bound_min(self.id)
@@ -151,40 +144,6 @@ class RLAgent():
 
     return
 
-  def _record_state(self):
-    s = self.world.env.record_state(self.id)
-    return s
-
-  def _record_goal(self):
-    g = self.world.env.record_goal(self.id)
-    return g
-
-  def _record_reward(self):
-    r = self.world.env.calc_reward(self.id)
-    return r
-
-  def _apply_action(self, a):
-    self.world.env.set_action(self.id, a)
-    return
-
-  def _end_path(self):
-    s = self._record_state()
-    g = self._record_goal()
-    r = self._record_reward()
-
-    self.path.rewards.append(r)
-    self.path.states.append(s)
-    self.path.goals.append(g)
-    self.path.terminate = self.world.env.check_terminate(self.id)
-
-    return
-
-  def _update_test_return(self, path):
-    path_reward = path.calc_return()
-    self.test_return += path_reward
-    self.test_episode_count += 1
-    return
-
   def _update_mode(self):
     if (self._mode == self.Mode.TRAIN):
       self._update_mode_train()
@@ -194,9 +153,6 @@ class RLAgent():
       self._update_mode_test()
     else:
       assert False, Logger.print2("Unsupported RL agent mode" + str(self._mode))
-    return
-
-  def _update_mode_train(self):
     return
 
   def _update_mode_train_end(self):
@@ -229,12 +185,6 @@ class RLAgent():
     self.test_episode_count = 0
     self.world.env.set_mode(self._mode)
     return
-
-  def _enable_output(self):
-    return MPIUtil.is_root_proc() and self.output_dir != ""
-
-  def _enable_int_output(self):
-    return MPIUtil.is_root_proc() and self.int_output_dir != ""
 
   def _calc_val_bounds(self, discount):
     r_min = self.world.env.get_reward_min(self.id)
