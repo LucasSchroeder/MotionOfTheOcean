@@ -246,8 +246,10 @@ class CustomAgent(RLAgent):
         # print(probability)
         # print(entropy)
         # TODO: THE CALL TO LOG HERE IS RESULTING IN NaNs BECAUSE THE ACTION HAS NEGATIVE VALUES
+        # the entropy allows the model to explore more actions
         entropy = tf.reduce_mean(tf.math.negative(tf.math.multiply(probability,
                                                                    tf.math.log(probability + 1e-10))))
+        print("entropy is:", entropy)
         sur1 = []
         sur2 = []
 
@@ -259,6 +261,8 @@ class CustomAgent(RLAgent):
             # EITHER KEEP THE CURRENT CHANGE TO GET RID OF LOGS OR FIGURE OUT HOW
             # TO TAKE GET RID OF NEGATIVE VALUES IN THE ACTION BEFORE TAKING THE LOG
             ratio = tf.math.exp(tf.math.log(pb + 1e-10) - tf.math.log(op + 1e-10))
+            print("ratio is: ", ratio)
+            print("advantage is: ", t)
             # ratio = tf.math.divide(pb + 1e-10, op + 1e-10)
             s1 = tf.math.multiply(ratio, t)
             s2 = tf.math.multiply(tf.clip_by_value(ratio, 1.0 - self.clip_pram, 1.0 + self.clip_pram), t)
@@ -267,11 +271,16 @@ class CustomAgent(RLAgent):
 
         sr1 = tf.stack(sur1)
         sr2 = tf.stack(sur2)
-
+        print("sr1 is ", sr1 )
+        print("sr2 is ", sr2 )
         aloss = -tf.reduce_mean(tf.math.minimum(sr1, sr2))
-        total_loss = aloss - entropy * tf.reduce_mean(-(pb * tf.math.log(pb + 1e-10)))
+        print("aloss is: ", aloss)
+        # total_loss = aloss - entropy * tf.reduce_mean(-(pb * tf.math.log(pb + 1e-10)))
+        total_loss = 0.5 * closs + aloss - 0.001 * tf.reduce_mean(
+            -(probability * tf.math.log(probability + 1e-10)))
         # loss = tf.reduce_mean(tf.math.minimum(sr1, sr2)) - closs + 0.001 * entropy
-
+        print("total_loss is:",total_loss)
+        assert(not tf.math.is_nan(total_loss))
         return total_loss
 
     def learn(self, states, actions, adv, old_probs, discnt_rewards):
@@ -286,7 +295,7 @@ class CustomAgent(RLAgent):
             v = self.critic(states, training=True)
             v = tf.reshape(v, (len(v),))
             td = tf.math.subtract(discnt_rewards, v)
-            c_loss = 0.5 * kls.mean_squared_error(discnt_rewards, v)
+            c_loss = kls.mean_squared_error(discnt_rewards, v)
             # TODO: We need to figure out this loss function for the actor
             a_loss = self.actor_loss(p, actions, adv, old_probs, c_loss)
 
@@ -330,6 +339,9 @@ def test_reward(env):
 # out model performed in the long run
 def advantage_estimation(states, actions, rewards, done, values, discount_factor, gamma):
     # initialize advantage and empty list
+    # print("actions: ", actions)
+    # print("rewards: ", rewards)
+    # print("values: ", values)
     gae = 0
     returns = []
     # loop backwards through the rewards
