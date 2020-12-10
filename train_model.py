@@ -136,7 +136,7 @@ class CustomAgent():
 
         self.a_opt = tf.keras.optimizers.SGD(learning_rate=0.00005,
                                              momentum=0.9, clipnorm=1.0)  # policy step size of α(π) = 5 × 10^(−5)
-        self.c_opt = tf.keras.optimizers.SGD(learning_rate=0.01, momentum=0.9, clipnorm=1.0)  # value stepsize of α(v) = 10^(−2)
+        self.c_opt = tf.keras.optimizers.SGD(learning_rate=0.00001, momentum=0.9, clipnorm=1.0)  # value stepsize of α(v) = 10^(−2)
         self.actor = custom_actor()
         self.critic = custom_critic()
         self.clip_pram = 0.2
@@ -155,7 +155,7 @@ class CustomAgent():
         self.actor = keras.models.load_model(in_path)
 
     def act(self, state):
-        prob = self.actor(np.array([state]))
+        prob = tf.convert_to_tensor([state],dtype=tf.float32)
         prob = prob.numpy()
         mu = tf.math.reduce_mean(prob)
         std = tf.math.reduce_std(prob)
@@ -184,21 +184,14 @@ class CustomAgent():
         clipped = tf.math.multiply(tf.clip_by_value(tf.transpose(ratio), 1.0 - self.clip_pram, 1.0 + self.clip_pram), adv)
 
         aloss = -tf.reduce_mean(tf.math.minimum(non_clipped, clipped))
-        total_loss = 0.5 * closs + aloss - 0.001 * tf.reduce_mean(-(probability * tf.math.log(probability + 1e-10)))
+        total_loss = closs + aloss - 0.001 * tf.reduce_mean(-(probability * tf.math.log(probability + 1e-10)))
 
         return total_loss
 
     def learn(self, states, actions, adv, old_probs, discnt_rewards):
-        discnt_rewards = tf.reshape(discnt_rewards, (len(discnt_rewards),))
-        adv = tf.reshape(adv, (len(adv),))
-
-        old_p = old_probs
-
-        old_p = tf.reshape(old_p, (len(old_p), self.num_actions))
         with tf.GradientTape() as tape1:
             v = self.critic(states, training=True)
-            v = tf.reshape(v, (len(v),))
-            c_loss = kls.mean_squared_error(discnt_rewards, v)
+            c_loss = 0.5*kls.mean_squared_error(discnt_rewards, v)
 
         with tf.GradientTape() as tape2:
             p = self.actor(states, training=True)
@@ -262,9 +255,9 @@ def advantage_estimation(rewards, done, values, discount_factor, gamma):
 
     # reverse the list of returns to restore the original order
     returns.reverse()
-    adv = np.array(returns, dtype=np.float32) - values[:-1]
-    adv = (adv - np.mean(adv)) / (np.std(adv) + 1e-10)
-    returns = np.array(returns, dtype=np.float32)
+    adv = tf.convert_to_tensor([returns], dtype=tf.float32) - values[:-1]
+    adv = (adv - tf.reduce_mean(adv)) / (tf.math.reduce_std(adv) + 1e-10)
+    returns = tf.convert_to_tensor([returns], dtype=tf.float32)
 
     return returns, adv
 
@@ -343,6 +336,7 @@ if __name__ == '__main__':
     ppo_agent = world.world_agent
     ppo_steps = 4096
     mini_batches = 256
+    batch_size = ppo_steps/mini_batches
     ep_reward = []
     total_avgr = []
     target_reached = False
@@ -373,7 +367,7 @@ if __name__ == '__main__':
 
         for s in range(ppo_steps):
             action = ppo_agent.act(state)
-            value = ppo_agent.critic(np.array([state])).numpy()
+            value = ppo_agent.critic(tf.convert_to_tensor([state],dtype=tf.float32)).numpy()
 
             # take a step with the environment 
             ppo_agent._apply_action(action)
@@ -387,26 +381,44 @@ if __name__ == '__main__':
             ########################### THIS LINE THAT CALLS PROB IS WRONG ###########
             # The action from the policy specifies target orientations for PD controllers
             # at each joint. IT DOES NOT SPECIFY PROBABILITIES!
-            probs.append(action)
+            probs.append(ppo_agent.actor(tf.convert_to_tensor([state],dtype=tf.float32)))
+            # probs.append(action)
+            value = tf.clip_by_value(value,-1000000000000,10000000000)
             values.append(value[0][0])
             state = next_state
             samples_count = samples_count + 1
 
-        value = ppo_agent.critic(np.array([state])).numpy()
+        value = ppo_agent.critic(tf.convert_to_tensor([state],dtype=tf.float32)).numpy()
+        value = tf.clip_by_value(value,-1000000000000,10000000000)
         values.append(value[0][0])
-        np.reshape(probs, (len(probs), ppo_agent.num_actions))
-        probs = np.stack(probs, axis=0)
+        tf.reshape(probs, (len(probs), ppo_agent.num_actions))
+        probs = tf.stack(probs, axis=0)
 
         returns, adv = advantage_estimation(rewards, dones, values,
                                                              ppo_agent.discount_factor, ppo_agent.gamma)
-        states = np.array(states, dtype=np.float32)
-        actions = np.array(actions, dtype=np.int32)
+        states = tf.convert_to_tensor([states], dtype=tf.float32) 
+        actions = tf.convert_to_tensor([actions], dtype=tf.float32)
+        states = tf.reshape(states, [-1,197])
+        returns = tf.reshape(returns, [len(returns[0])])
+        adv = tf.reshape(adv, [len(adv[0]),])
+        probs = tf.reshape(probs, [-1, ppo_agent.num_actions])
 
-        ## Update the gradients
-        print("Learning/ Updating Gradients")
-        al, cl = ppo_agent.learn(states, actions, adv, probs, returns)
+        
+        for learn_step in range(mini_batches):
+            start_index = int(learn_step * batch_size)
+            stop_index = int(start_index + batch_size)
 
-        avg_reward = np.mean([test_reward(env) for _ in range(32)])
+            curr_states_batch = states[start_index:stop_index]
+            curr_action_batch = actions[start_index:stop_index]
+            curr_adv_batch = adv[start_index:stop_index]
+            curr_prolicy_batch = probs[start_index:stop_index]
+            curr_returns_batch = returns[start_index:stop_index]
+
+            ## Update the gradients
+            print("Learning/ Updating Gradients")
+            al, cl = ppo_agent.learn(curr_states_batch, curr_action_batch, curr_adv_batch, curr_prolicy_batch, curr_returns_batch)
+
+        avg_reward = tf.math.reduce_mean([test_reward(env) for _ in range(32)])
         print(f"TEST REWARD is {avg_reward}")
         avg_rewards_list.append(avg_reward)
         if avg_reward > best_reward:
