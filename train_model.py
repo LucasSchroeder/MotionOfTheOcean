@@ -20,6 +20,8 @@ from pybullet_utils.arg_parser import ArgParser
 from pybullet_utils.logger import Logger
 
 import os
+import json
+import csv
 
 save_name = ''
 
@@ -310,12 +312,21 @@ def build_arg_parser(args, training):
     save_name = arg_file.replace('run_humanoid3d_', '').replace('train_humanoid3d_', '').replace('_args.txt', '')
     return arg_parser
 
+def process_motion_data(path_to_motion_file, env):
+    with open(path_to_motion_file, 'r') as f:
+      motion_data = json.load(f)
+    env._mocapData = motion_data
+
 
 def build_world(args, enable_draw, training = True):
     arg_parser = build_arg_parser(args,training)
     env = PyBulletDeepMimicEnv(arg_parser, enable_draw)
-    world = RLWorld(env, arg_parser)
+    
+    # Process the motion capture data:
+    path_to_motion_file = arg_parser.parse_strings('motion_file')[0]
+    process_motion_data(path_to_motion_file,env)
 
+    world = RLWorld(env, arg_parser)
     world.reset()
 
     return world
@@ -337,7 +348,14 @@ if __name__ == '__main__':
     target_reached = False
     best_reward = 0
     avg_rewards_list = []
-    test_iter = 1
+    samples_count = 0
+
+    # Delete contents from rewards_log.csv if it exists
+    with open(r'rewards_log.csv', 'w+') as f:
+        writer = csv.writer(f)
+        fields=['# samples trained on','avg_reward']
+        writer.writerow(fields)
+        f.close()
 
     while not target_reached:
 
@@ -373,6 +391,7 @@ if __name__ == '__main__':
             probs.append(action)
             values.append(value[0][0])
             state = next_state
+            samples_count = samples_count + 1
 
         value = ppo_agent.critic(np.array([state])).numpy()
         values.append(value[0][0])
@@ -404,10 +423,10 @@ if __name__ == '__main__':
         world.reset()
 
         # SAVE CSV FILE
-        file = open('rewards_log.csv','a')
-        file.write(str(test_iter)+','+str(avg_reward))
-        file.close()
-
-        test_iter = test_iter + 1
+        with open(r'rewards_log.csv', 'a') as f:
+            writer = csv.writer(f)
+            fields=[samples_count,avg_reward]
+            writer.writerow(fields)
+            f.close()
 
     env.close()
