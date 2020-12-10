@@ -201,7 +201,10 @@ class CustomAgent():
             c_loss = kls.mean_squared_error(discnt_rewards, v)
 
         with tf.GradientTape() as tape2:
+            print("states[0]: ", len(states[0]))
+            # p = self.actor(tf.convert_to_tensor([states]), training=True)
             p = self.actor(states, training=True)
+
             a_loss = self.actor_loss(p, actions, adv, old_probs, c_loss)
 
 
