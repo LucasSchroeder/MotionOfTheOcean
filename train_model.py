@@ -136,7 +136,7 @@ class CustomAgent():
 
         self.a_opt = tf.keras.optimizers.SGD(learning_rate=0.00005,
                                              momentum=0.9, clipnorm=1.0)  # policy step size of α(π) = 5 × 10^(−5)
-        self.c_opt = tf.keras.optimizers.SGD(learning_rate=0.01, momentum=0.9, clipnorm=1.0)  # value stepsize of α(v) = 10^(−2)
+        self.c_opt = tf.keras.optimizers.SGD(learning_rate=0.00001, momentum=0.9, clipnorm=1.0)  # value stepsize of α(v) = 10^(−2)
         self.actor = custom_actor()
         self.critic = custom_critic()
         self.clip_pram = 0.2
@@ -155,7 +155,7 @@ class CustomAgent():
         self.actor = keras.models.load_model(in_path)
 
     def act(self, state):
-        prob = self.actor(np.array([state]))
+        prob = tf.convert_to_tensor([state],dtype=tf.float32)
         prob = prob.numpy()
         mu = tf.math.reduce_mean(prob)
         std = tf.math.reduce_std(prob)
@@ -177,14 +177,20 @@ class CustomAgent():
         min_old_prob = tf.math.reduce_min(old_probs)
         old_probs = [(x - min_old_prob + .0000001) / (max_old_pb - min_old_prob) for x in old_probs]
         old_probs = tf.convert_to_tensor(old_probs)
+
+        # print("probability is: ", probability)
+        # print("old_probs is: ", old_probs)
+        # print("adv is: ", adv)
         
         ratio = tf.math.exp(tf.math.log(probability + 1e-10) - tf.math.log(old_probs + 1e-10))
+        # print("ratio is:",ratio)
+        print("")
         
         non_clipped = tf.math.multiply(tf.transpose(ratio), adv)
         clipped = tf.math.multiply(tf.clip_by_value(tf.transpose(ratio), 1.0 - self.clip_pram, 1.0 + self.clip_pram), adv)
 
         aloss = -tf.reduce_mean(tf.math.minimum(non_clipped, clipped))
-        total_loss = 0.5 * closs + aloss - 0.001 * tf.reduce_mean(-(probability * tf.math.log(probability + 1e-10)))
+        total_loss = closs + aloss - 0.001 * tf.reduce_mean(-(probability * tf.math.log(probability + 1e-10)))
 
         return total_loss
     
@@ -197,8 +203,10 @@ class CustomAgent():
         # old_p = tf.reshape(old_p, (len(old_p), self.num_actions))
         with tf.GradientTape() as tape1:
             v = self.critic(states, training=True)
-            v = tf.reshape(v, (len(v),))
-            c_loss = kls.mean_squared_error(discnt_rewards, v)
+            print("states is ", states)
+            print("v is: ", v)
+            
+            c_loss = 0.5*kls.mean_squared_error(discnt_rewards, v)
 
         with tf.GradientTape() as tape2:
             print("states[0]: ", len(states[0]))
@@ -207,7 +215,7 @@ class CustomAgent():
 
             a_loss = self.actor_loss(p, actions, adv, old_probs, c_loss)
 
-
+        
         grads1 = tape2.gradient(a_loss, self.actor.trainable_variables)
         grads2 = tape1.gradient(c_loss, self.critic.trainable_variables)
         self.a_opt.apply_gradients(zip(grads1, self.actor.trainable_variables))
@@ -258,6 +266,13 @@ def advantage_estimation(rewards, done, values, discount_factor, gamma):
         # the next state in the batch will be from a newly restarted game so we do not want 
         # to consider that and therefore mask value is taken as 0
         delta = rewards[i] + gamma * values[i + 1] * done[i] - values[i]
+        print("rewards[i]: ", rewards[i])
+        print("gamma: ", gamma)
+        print("values[i + 1]: ", values[i + 1])
+        print("done[i]: ", done[i])
+        print("values[i]: ", values[i])
+        print("delta is: ", delta)
+        assert(not np.isnan(delta))
         # update gae
         gae = delta + gamma * discount_factor * dones[i] * gae
         # append the return to the list of returns
@@ -265,9 +280,9 @@ def advantage_estimation(rewards, done, values, discount_factor, gamma):
 
     # reverse the list of returns to restore the original order
     returns.reverse()
-    adv = np.array(returns, dtype=np.float32) - values[:-1]
-    adv = (adv - np.mean(adv)) / (np.std(adv) + 1e-10)
-    returns = np.array(returns, dtype=np.float32)
+    adv = tf.convert_to_tensor([returns], dtype=tf.float32) - values[:-1]
+    adv = (adv - tf.reduce_mean(adv)) / (tf.math.reduce_std(adv) + 1e-10)
+    returns = tf.convert_to_tensor([returns], dtype=tf.float32)
 
     return returns, adv
 
@@ -360,7 +375,7 @@ if __name__ == '__main__':
         fields=['# samples trained on','avg_reward']
         writer.writerow(fields)
         f.close()
-
+    learn_counter = 0
     while not target_reached:
 
         done = False
@@ -378,10 +393,11 @@ if __name__ == '__main__':
         # for s in range(ppo_steps): #### CHANGE THIS BACK
         for s in range(32):
             print(s)
-            action = ppo_agent.act(state)
-            value = ppo_agent.critic(np.array([state])).numpy()
+            action = ppo_agent.act(tf.convert_to_tensor([state],dtype=tf.float32))[0]
+            value = ppo_agent.critic(tf.convert_to_tensor([state],dtype=tf.float32)).numpy()
 
             # take a step with the environment 
+            # print("action", action)
             ppo_agent._apply_action(action)
             next_state, reward, done = update_world(world)
 
@@ -393,27 +409,39 @@ if __name__ == '__main__':
             ########################### THIS LINE THAT CALLS PROB IS WRONG ###########
             # The action from the policy specifies target orientations for PD controllers
             # at each joint. IT DOES NOT SPECIFY PROBABILITIES!
-            probs.append(ppo_agent.actor(np.array([state])))
+            probs.append(ppo_agent.actor(tf.convert_to_tensor([state],dtype=tf.float32)))
             # probs.append(action)
+            value = tf.clip_by_value(value,-1000000000000,10000000000)
             values.append(value[0][0])
             state = next_state
             samples_count = samples_count + 1
 
-        value = ppo_agent.critic(np.array([state])).numpy()
+        value = ppo_agent.critic(tf.convert_to_tensor([state],dtype=tf.float32)).numpy()
+        value = tf.clip_by_value(value,-1000000000000,10000000000)
         values.append(value[0][0])
-        np.reshape(probs, (len(probs), ppo_agent.num_actions))
-        probs = np.stack(probs, axis=0)
+        tf.reshape(probs, (len(probs), ppo_agent.num_actions))
+        probs = tf.stack(probs, axis=0)
 
         returns, adv = advantage_estimation(rewards, dones, values,
                                                              ppo_agent.discount_factor, ppo_agent.gamma)
-        states = np.array(states, dtype=np.float32)
-        actions = np.array(actions, dtype=np.int32)
-        returns = tf.reshape(returns, (len(returns),))
-        adv = tf.reshape(adv, (len(adv),))
-        probs = tf.reshape(probs, (len(probs), ppo_agent.num_actions))
+        states = tf.convert_to_tensor([states], dtype=tf.float32) 
+        actions = tf.convert_to_tensor([actions], dtype=tf.float32)
+        print("values are: ", values)
+        # assert(1==learn_counter or 0 ==learn_counter)
+        print("returns",returns)
+        states = tf.reshape(states, [-1,197])
+        # actions = tf.reshape(actions, [-1,ppo_agent.num_actions])
+        returns = tf.reshape(returns, [len(returns[0])])
+        adv = tf.reshape(adv, [len(adv[0]),])
+
+        print("adv is ", adv)
+        print("returns is ", returns)
+        # assert(1==2)
+        probs = tf.reshape(probs, [-1, ppo_agent.num_actions])
 
         
-        for learn_step in range(mini_batches):
+        # for learn_step in range(mini_batches):
+        for learn_step in range(2):
             start_index = int(learn_step * batch_size)
             stop_index = int(start_index + batch_size)
 
@@ -426,8 +454,9 @@ if __name__ == '__main__':
             ## Update the gradients
             print("Learning/ Updating Gradients")
             al, cl = ppo_agent.learn(curr_states_batch, curr_action_batch, curr_adv_batch, curr_prolicy_batch, curr_returns_batch)
+            learn_counter = learn_counter + 1
 
-        avg_reward = np.mean([test_reward(env) for _ in range(32)])
+        avg_reward = tf.math.reduce_mean([test_reward(env) for _ in range(5)]) # change this back
         print(f"TEST REWARD is {avg_reward}")
         avg_rewards_list.append(avg_reward)
         if avg_reward > best_reward:
@@ -441,7 +470,7 @@ if __name__ == '__main__':
         total_reward = 0
         steps_update_world = 0
         world.reset()
-
+        print("learn_counter: " , learn_counter)
         # SAVE CSV FILE
         with open(r'rewards_log.csv', 'a') as f:
             writer = csv.writer(f)
