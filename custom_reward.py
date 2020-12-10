@@ -6,12 +6,9 @@ from pybullet_utils import pd_controller_stable
 def getRewardCustom(pose, humanoid):
     """Compute and return the pose-based reward."""
     pose_w = 0.65
-    vel_w = 0.5
+    vel_w = 0.1
     end_eff_w = 0.15
-    if humanoid._useComReward:
-        com_w = 0.1
-    else:
-        com_w = 0
+    com_w = 0.1
 
     total_w = pose_w + vel_w + end_eff_w + com_w
     pose_w /= total_w
