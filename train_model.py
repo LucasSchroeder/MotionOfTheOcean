@@ -316,8 +316,6 @@ def build_world(args, enable_draw, training = True):
     env = PyBulletDeepMimicEnv(arg_parser, enable_draw)
     world = RLWorld(env, arg_parser)
 
-    agent_files = os.getcwd() + "/" + arg_parser.parse_string("agent_files")
-
     world.reset()
 
     return world
