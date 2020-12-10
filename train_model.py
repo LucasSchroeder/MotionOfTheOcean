@@ -187,7 +187,7 @@ class CustomAgent():
         total_loss = closs + aloss - 0.001 * tf.reduce_mean(-(probability * tf.math.log(probability + 1e-10)))
 
         return total_loss
-    
+
     def learn(self, states, actions, adv, old_probs, discnt_rewards):
         with tf.GradientTape() as tape1:
             v = self.critic(states, training=True)
@@ -197,7 +197,7 @@ class CustomAgent():
             p = self.actor(states, training=True)
             a_loss = self.actor_loss(p, actions, adv, old_probs, c_loss)
 
-        
+
         grads1 = tape2.gradient(a_loss, self.actor.trainable_variables)
         grads2 = tape1.gradient(c_loss, self.critic.trainable_variables)
         self.a_opt.apply_gradients(zip(grads1, self.actor.trainable_variables))
@@ -350,7 +350,7 @@ if __name__ == '__main__':
         fields=['# samples trained on','avg_reward']
         writer.writerow(fields)
         f.close()
-    learn_counter = 0
+
     while not target_reached:
 
         done = False
@@ -365,8 +365,8 @@ if __name__ == '__main__':
         values = []
         print("STARTING A NEW EPISODE")
 
-        for s in range(ppo_steps): #### CHANGE THIS BACK
-            action = ppo_agent.act(tf.convert_to_tensor([state],dtype=tf.float32))[0]
+        for s in range(ppo_steps):
+            action = ppo_agent.act(state)
             value = ppo_agent.critic(tf.convert_to_tensor([state],dtype=tf.float32)).numpy()
 
             # take a step with the environment 
@@ -404,8 +404,7 @@ if __name__ == '__main__':
         probs = tf.reshape(probs, [-1, ppo_agent.num_actions])
 
         
-        # for learn_step in range(mini_batches):
-        for learn_step in range(2):
+        for learn_step in range(mini_batches):
             start_index = int(learn_step * batch_size)
             stop_index = int(start_index + batch_size)
 
@@ -418,9 +417,8 @@ if __name__ == '__main__':
             ## Update the gradients
             print("Learning/ Updating Gradients")
             al, cl = ppo_agent.learn(curr_states_batch, curr_action_batch, curr_adv_batch, curr_prolicy_batch, curr_returns_batch)
-            learn_counter = learn_counter + 1
 
-        avg_reward = tf.math.reduce_mean([test_reward(env) for _ in range(5)]) # change this back
+        avg_reward = tf.math.reduce_mean([test_reward(env) for _ in range(32)])
         print(f"TEST REWARD is {avg_reward}")
         avg_rewards_list.append(avg_reward)
         if avg_reward > best_reward:
@@ -434,7 +432,7 @@ if __name__ == '__main__':
         total_reward = 0
         steps_update_world = 0
         world.reset()
-        print("learn_counter: " , learn_counter)
+
         # SAVE CSV FILE
         with open(r'rewards_log.csv', 'a') as f:
             writer = csv.writer(f)
