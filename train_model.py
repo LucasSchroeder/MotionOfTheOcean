@@ -1,6 +1,7 @@
 import os
 import sys
 import inspect
+from enum import Enum
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(os.path.dirname(currentdir))
@@ -11,7 +12,6 @@ import tensorflow as tf
 from tensorflow import keras
 import tensorflow_probability as tfp
 import tensorflow.keras.losses as kls
-from rl_agent import RLAgent
 from pybullet_envs.deep_mimic.env.env import Env
 from custom_reward import getRewardCustom
 from pybullet_envs.deep_mimic.env.pybullet_deep_mimic_env import PyBulletDeepMimicEnv
@@ -20,7 +20,6 @@ from pybullet_utils.arg_parser import ArgParser
 from pybullet_utils.logger import Logger
 
 import os
-import json
 
 save_name = ''
 
@@ -34,9 +33,6 @@ class RLWorld(object):
         self.env = env
         self.arg_parser = arg_parser
         self._enable_training = True
-        self.train_agents = []
-        self.parse_args(arg_parser)
-
         self.build_agents()
 
         return
@@ -46,53 +42,32 @@ class RLWorld(object):
 
     def set_enable_training(self, enable):
         self._enable_training = enable
-        for i in range(len(self.agents)):
-            curr_agent = self.agents[i]
-            if curr_agent is not None:
-                enable_curr_train = self.train_agents[i] if (len(self.train_agents) > 0) else True
-                curr_agent.enable_training = self.enable_training and enable_curr_train
+        
+        self.world_agent.enable_training = self.enable_training
 
         if (self._enable_training):
-            self.env.set_mode(RLAgent.Mode.TRAIN)
+            self.env.set_mode(CustomAgent.Mode.TRAIN)
         else:
-            self.env.set_mode(RLAgent.Mode.TEST)
+            self.env.set_mode(CustomAgent.Mode.TEST)
 
         return
 
     enable_training = property(get_enable_training, set_enable_training)
-
-    def parse_args(self, arg_parser):
-        self.train_agents = self.arg_parser.parse_bools('train_agents')
-        assert (len(self.train_agents) == 1 or len(self.train_agents) == 0)
-
-        return
 
     def shutdown(self):
         self.env.shutdown()
         return
 
     def build_agents(self):
-        self.agents = []
-
-        agent_files = self.arg_parser.parse_strings('agent_files')
-        print("len(agent_files)=", len(agent_files))
-        assert (len(agent_files) == 1 or len(agent_files) == 0)
+        self.world_agent = CustomAgent(self, 0)
 
         model_files = self.arg_parser.parse_strings('model_files')
         assert (len(model_files) == 1 or len(model_files) == 0)
 
-        curr_file = agent_files[0]
-        curr_agent = self._build_agent(0, curr_file)
-
-        if curr_agent is not None:
-            Logger.print2(str(curr_agent))
-
-            if (len(model_files) > 0):
+        if (len(model_files) > 0):
                 curr_model_file = model_files[0]
                 if curr_model_file != 'none':
-                    curr_agent.load_model(os.getcwd() + "/" + curr_model_file)
-
-        self.agents.append(curr_agent)
+                    self.world_agent.load_model(os.getcwd() + "/" + curr_model_file)
 
         self.set_enable_training(self.enable_training)
 
@@ -115,19 +90,6 @@ class RLWorld(object):
     def reset(self):
         self.env.reset()
         return
-
-    def _build_agent(self, id, agent_file):
-        if (agent_file == 'none'):
-            agent = None
-        else:
-            agent = None
-            with open(os.getcwd() + "/" + agent_file) as data_file:
-                json_data = json.load(data_file)
-
-                agent = CustomAgent(self, id, json_data)
-
-            assert (agent != None), 'Failed to build agent {:d} from: {}'.format(id, agent_file)
-        return agent
 
 
 class custom_critic(tf.keras.Model):
@@ -160,11 +122,13 @@ class custom_actor(tf.keras.Model):
         return a
 
 
-class CustomAgent(RLAgent):
-    def __init__(self, world, id, json_data, gamma=0.95):
+class CustomAgent():
+    class Mode(Enum):
+        TRAIN = 0
+        TEST = 1
+    def __init__(self, world, id, gamma=0.95):
         self.world = world
         self.id = id
-        super().__init__(json_data)
         self.gamma = gamma
         self.discount_factor = 0.95
 
@@ -175,14 +139,17 @@ class CustomAgent(RLAgent):
         self.critic = custom_critic()
         self.clip_pram = 0.2
 
-        self.state_size = 197
         self.num_actions = 36
+
+        self.action_bound_min = self.world.env.build_action_bound_min(self.id)
+        self.action_bound_max = self.world.env.build_action_bound_max(self.id)
 
     def _apply_action(self, a):
         self.world.env.set_action(self.id, a)
         return
 
     def load_model(self, in_path):
+        print("LOADED MODEL")
         self.actor = keras.models.load_model(in_path)
 
     def act(self, state):
@@ -322,13 +289,16 @@ def update_world(world):
     return next_state, reward, is_done
 
 
-def build_arg_parser(args):
+def build_arg_parser(args, training):
     arg_parser = ArgParser()
     arg_parser.load_args(args)
 
     arg_file = arg_parser.parse_string('arg_file', '')
     if arg_file == '':
-        arg_file = "run_humanoid3d_backflip_args.txt"
+        if training == True:
+            arg_file = "train_humanoid3d_backflip_args.txt"
+        else: 
+            arg_file = "run_humanoid3d_backflip_args.txt"
     if (arg_file != ''):
         path = os.getcwd() + "/args/" + arg_file
         succ = arg_parser.load_file(path)
@@ -341,22 +311,14 @@ def build_arg_parser(args):
     return arg_parser
 
 
-def build_world(args, enable_draw):
-    arg_parser = build_arg_parser(args)
+def build_world(args, enable_draw, training = True):
+    arg_parser = build_arg_parser(args,training)
     env = PyBulletDeepMimicEnv(arg_parser, enable_draw)
     world = RLWorld(env, arg_parser)
 
     agent_files = os.getcwd() + "/" + arg_parser.parse_string("agent_files")
 
-    with open(agent_files) as data_file:
-        json_data = json.load(data_file)
-        print("json_data=", json_data)
-
-        # build the custom agent
-        agent = CustomAgent(world, id, json_data)
-
-        agent.set_enable_training(False)
-        world.reset()
+    world.reset()
 
     return world
 
@@ -369,7 +331,7 @@ if __name__ == '__main__':
     env = world.env
 
     tf.random.set_seed(336699)
-    ppo_agent = world.agents[0]
+    ppo_agent = world.world_agent
     ppo_steps = 4096
     mini_batches = 256
     ep_reward = []

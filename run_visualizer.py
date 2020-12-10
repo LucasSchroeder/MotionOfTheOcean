@@ -14,10 +14,10 @@ args = sys.argv[1:]
 
 if __name__ == '__main__':
 
-  world = build_world(args, True)
+  world = build_world(args, enable_draw = True, training = False)
   env = world.env
   state = env._humanoid.getState()
-  agentoo7 = world.agents[0]
+  agentoo7 = world.world_agent
 
   while (world.env._pybullet_client.isConnected()):
 
