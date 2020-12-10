@@ -177,14 +177,8 @@ class CustomAgent():
         min_old_prob = tf.math.reduce_min(old_probs)
         old_probs = [(x - min_old_prob + .0000001) / (max_old_pb - min_old_prob) for x in old_probs]
         old_probs = tf.convert_to_tensor(old_probs)
-
-        # print("probability is: ", probability)
-        # print("old_probs is: ", old_probs)
-        # print("adv is: ", adv)
         
         ratio = tf.math.exp(tf.math.log(probability + 1e-10) - tf.math.log(old_probs + 1e-10))
-        # print("ratio is:",ratio)
-        print("")
         
         non_clipped = tf.math.multiply(tf.transpose(ratio), adv)
         clipped = tf.math.multiply(tf.clip_by_value(tf.transpose(ratio), 1.0 - self.clip_pram, 1.0 + self.clip_pram), adv)
@@ -195,24 +189,12 @@ class CustomAgent():
         return total_loss
     
     def learn(self, states, actions, adv, old_probs, discnt_rewards):
-        # discnt_rewards = tf.reshape(discnt_rewards, (len(discnt_rewards),))
-        # adv = tf.reshape(adv, (len(adv),))
-
-        # old_p = old_probs
-
-        # old_p = tf.reshape(old_p, (len(old_p), self.num_actions))
         with tf.GradientTape() as tape1:
             v = self.critic(states, training=True)
-            print("states is ", states)
-            print("v is: ", v)
-            
             c_loss = 0.5*kls.mean_squared_error(discnt_rewards, v)
 
         with tf.GradientTape() as tape2:
-            print("states[0]: ", len(states[0]))
-            # p = self.actor(tf.convert_to_tensor([states]), training=True)
             p = self.actor(states, training=True)
-
             a_loss = self.actor_loss(p, actions, adv, old_probs, c_loss)
 
         
@@ -266,13 +248,6 @@ def advantage_estimation(rewards, done, values, discount_factor, gamma):
         # the next state in the batch will be from a newly restarted game so we do not want 
         # to consider that and therefore mask value is taken as 0
         delta = rewards[i] + gamma * values[i + 1] * done[i] - values[i]
-        print("rewards[i]: ", rewards[i])
-        print("gamma: ", gamma)
-        print("values[i + 1]: ", values[i + 1])
-        print("done[i]: ", done[i])
-        print("values[i]: ", values[i])
-        print("delta is: ", delta)
-        assert(not np.isnan(delta))
         # update gae
         gae = delta + gamma * discount_factor * dones[i] * gae
         # append the return to the list of returns
@@ -390,14 +365,11 @@ if __name__ == '__main__':
         values = []
         print("STARTING A NEW EPISODE")
 
-        # for s in range(ppo_steps): #### CHANGE THIS BACK
-        for s in range(32):
-            print(s)
+        for s in range(ppo_steps): #### CHANGE THIS BACK
             action = ppo_agent.act(tf.convert_to_tensor([state],dtype=tf.float32))[0]
             value = ppo_agent.critic(tf.convert_to_tensor([state],dtype=tf.float32)).numpy()
 
             # take a step with the environment 
-            # print("action", action)
             ppo_agent._apply_action(action)
             next_state, reward, done = update_world(world)
 
@@ -426,17 +398,9 @@ if __name__ == '__main__':
                                                              ppo_agent.discount_factor, ppo_agent.gamma)
         states = tf.convert_to_tensor([states], dtype=tf.float32) 
         actions = tf.convert_to_tensor([actions], dtype=tf.float32)
-        print("values are: ", values)
-        # assert(1==learn_counter or 0 ==learn_counter)
-        print("returns",returns)
         states = tf.reshape(states, [-1,197])
-        # actions = tf.reshape(actions, [-1,ppo_agent.num_actions])
         returns = tf.reshape(returns, [len(returns[0])])
         adv = tf.reshape(adv, [len(adv[0]),])
-
-        print("adv is ", adv)
-        print("returns is ", returns)
-        # assert(1==2)
         probs = tf.reshape(probs, [-1, ppo_agent.num_actions])
 
         
