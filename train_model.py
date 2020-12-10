@@ -187,14 +187,14 @@ class CustomAgent():
         total_loss = 0.5 * closs + aloss - 0.001 * tf.reduce_mean(-(probability * tf.math.log(probability + 1e-10)))
 
         return total_loss
-
+    
     def learn(self, states, actions, adv, old_probs, discnt_rewards):
-        discnt_rewards = tf.reshape(discnt_rewards, (len(discnt_rewards),))
-        adv = tf.reshape(adv, (len(adv),))
+        # discnt_rewards = tf.reshape(discnt_rewards, (len(discnt_rewards),))
+        # adv = tf.reshape(adv, (len(adv),))
 
-        old_p = old_probs
+        # old_p = old_probs
 
-        old_p = tf.reshape(old_p, (len(old_p), self.num_actions))
+        # old_p = tf.reshape(old_p, (len(old_p), self.num_actions))
         with tf.GradientTape() as tape1:
             v = self.critic(states, training=True)
             v = tf.reshape(v, (len(v),))
@@ -343,6 +343,7 @@ if __name__ == '__main__':
     ppo_agent = world.world_agent
     ppo_steps = 4096
     mini_batches = 256
+    batch_size = ppo_steps/mini_batches
     ep_reward = []
     total_avgr = []
     target_reached = False
@@ -371,7 +372,9 @@ if __name__ == '__main__':
         values = []
         print("STARTING A NEW EPISODE")
 
-        for s in range(ppo_steps):
+        # for s in range(ppo_steps): #### CHANGE THIS BACK
+        for s in range(32):
+            print(s)
             action = ppo_agent.act(state)
             value = ppo_agent.critic(np.array([state])).numpy()
 
@@ -387,7 +390,8 @@ if __name__ == '__main__':
             ########################### THIS LINE THAT CALLS PROB IS WRONG ###########
             # The action from the policy specifies target orientations for PD controllers
             # at each joint. IT DOES NOT SPECIFY PROBABILITIES!
-            probs.append(action)
+            probs.append(ppo_agent.actor(np.array([state])))
+            # probs.append(action)
             values.append(value[0][0])
             state = next_state
             samples_count = samples_count + 1
@@ -401,10 +405,24 @@ if __name__ == '__main__':
                                                              ppo_agent.discount_factor, ppo_agent.gamma)
         states = np.array(states, dtype=np.float32)
         actions = np.array(actions, dtype=np.int32)
+        returns = tf.reshape(returns, (len(returns),))
+        adv = tf.reshape(adv, (len(adv),))
+        probs = tf.reshape(probs, (len(probs), ppo_agent.num_actions))
 
-        ## Update the gradients
-        print("Learning/ Updating Gradients")
-        al, cl = ppo_agent.learn(states, actions, adv, probs, returns)
+        
+        for learn_step in range(mini_batches):
+            start_index = int(learn_step * batch_size)
+            stop_index = int(start_index + batch_size)
+
+            curr_states_batch = states[start_index:stop_index]
+            curr_action_batch = actions[start_index:stop_index]
+            curr_adv_batch = adv[start_index:stop_index]
+            curr_prolicy_batch = probs[start_index:stop_index]
+            curr_returns_batch = returns[start_index:stop_index]
+
+            ## Update the gradients
+            print("Learning/ Updating Gradients")
+            al, cl = ppo_agent.learn(curr_states_batch, curr_action_batch, curr_adv_batch, curr_prolicy_batch, curr_returns_batch)
 
         avg_reward = np.mean([test_reward(env) for _ in range(32)])
         print(f"TEST REWARD is {avg_reward}")
