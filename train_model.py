@@ -387,7 +387,6 @@ if __name__ == '__main__':
             ########################### THIS LINE THAT CALLS PROB IS WRONG ###########
             # The action from the policy specifies target orientations for PD controllers
             # at each joint. IT DOES NOT SPECIFY PROBABILITIES!
-            prob = ppo_agent.actor(np.array([state]))
             probs.append(action)
             values.append(value[0][0])
             state = next_state
