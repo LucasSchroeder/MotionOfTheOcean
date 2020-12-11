@@ -10,6 +10,8 @@ Use reinforcement learning to train a simulated humanoid to imitate a variety of
 
 ``pip install tensorflow-probability``
 
+``pip install gym``
+
 ``OpenGL >= 3.2``
 
 ``pip install mpi4py`` (NOTE: You must install ``mpich`` before installing mpi4py. On Macs, you can achive this by running: 
