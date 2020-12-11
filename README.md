@@ -1,14 +1,14 @@
 # Motion Of The Ocean - Deep Learning Project 
 
-Use reinforcement learning to train a simulated humanoid to imitate a variety of motion skills from motioncapture data.
+Use reinforcement learning to train a simulated humanoid to imitate a variety of motion skills from motioncapture data. Based off of [Example-Guided Deep Reinforcement Learning of Physics-Based Character Skills](https://xbpeng.github.io/projects/DeepMimic/index.html)
 
 
 ## Dependencies
-``pip3 install gast==0.3.3``
+``pip3 install pybullet --upgrade --user``
 
-``pip3 install pybullet``
+``pip3 install tensorflow==2.3.1``
 
-``pip install tensorflow==2.3.1``
+``pip install tensorflow-probability``
 
 ``OpenGL >= 3.2``
 
@@ -28,21 +28,10 @@ corresponds to the motion that your policy was trained for, otherwise the policy
 To train a policy, use `train_model.py` by specifying an argument file and the number of worker processes.
 For example,
 ```
-python3 train_model.py --arg_file train_humanoid3d_walk_args.txt --num_workers 4
+python3 train_model.py --arg_file train_humanoid3d_walk_args.txt
 ```
 will train a policy to walk using 4 workers. It typically takes about 60 millions samples 
 to train one policy, which can take a day when training with 16 workers. 
-
-*NOTE* This our code does not follow the paper exactly. It is based on this 
-[Medium article.](https://towardsdatascience.com/proximal-policy-optimization-ppo-with-tensorflow-2-x-89c9430ecc26)
-
-I believe one of the issues is where it calls 
-```
-prob = agentoo7.actor(np.array([state]))
-probs.append(prob[0])
-```
-This is wrong because the actor is not actually returning probablities. It is returning an action, which is a Tensor of size 36. This size makes sense because the humanoid has 36 Action Parameters. 
-
 
 ## Running Visualizer on Our Models:
 You can visualize how the model performs by running the `run_visualizer.py` file.
@@ -60,32 +49,15 @@ will run the visualizer for the model in `Saved_Models/` that was trained agains
 - scrollwheel will zoom in/out
 - pressing space will pause/resume the simulation
 
-## Motion capture Data
-Motion capture data can be found in `data/motions/`.  The motion files follow the JSON format. The `"Loop"` field 
-specifies whether or not the motion is cyclic.`"wrap"` specifies a cyclic motion that will wrap back to the start 
-at the end, while `"none"` specifies an acyclic motion that will stop once it reaches the end of the motion. Each 
-vector in the `"Frames"` list specifies a keyframe in the motion. Each frame has the following format:
-```
-[
-	duration of frame in seconds (1D),
-	root position (3D),
-	root rotation (4D),
-	chest rotation (4D),
-	neck rotation (4D),
-	right hip rotation (4D),
-	right knee rotation (1D),
-	right ankle rotation (4D),
-	right shoulder rotation (4D),
-	right elbow rotation (1D),
-	left hip rotation (4D),
-	left knee rotation (1D),
-	left ankle rotation (4D),
-	left shoulder rotation (4D),
-	left elbow rotation (1D)
-]
-```
+## Team Members
+Lucas Schroeder
+Peter Zubiago 
+Chris Luke
 
-Positions are specified in meters, 3D rotations for spherical joints are specified as quaternions `(w, x, y ,z)`,
-and 1D rotations for revolute joints (e.g. knees and elbows) are represented with a scalar rotation in radians. The root
-positions and rotations are in world coordinates, but all other joint rotations are in the joint's local coordinates.
-To use your own motion clip, convert it to a similar style JSON file.
+## References 
+https://dl.acm.org/doi/10.1145/3359566.3360072 
+
+https://medium.com/@rudraalabs/deep-mimic-with-bvh-data-2ca367cea418
+
+https://towardsdatascience.com/proximal-policy-optimization-tutorial-part-2-2-gae-and-ppo-loss-fe1b3c5549e8?fbclid=IwAR25_VSFYADHIUjaOZrqz7rZBgvwW11gqk77NMdnd9oHwBf_LCfdapMoSb4
+
