@@ -51,7 +51,9 @@ will run the visualizer for the model in `Saved_Models/` that was trained agains
 
 ## Team Members
 Lucas Schroeder
+
 Peter Zubiago 
+
 Chris Luke
 
 ## References 
